@@ -1,0 +1,5 @@
+driver: etcd
+config:
+  endpoints:
+    - "localhost:2379"
+  dialTimeout: 5s

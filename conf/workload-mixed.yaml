@@ -1,0 +1,7 @@
+
+readRatio: 0.05
+keyspaceSize: 10000
+valueSize: 128
+targetRate: 100
+duration: 90s
+parallelism: 1

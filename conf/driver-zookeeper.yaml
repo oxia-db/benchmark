@@ -1,0 +1,4 @@
+driver: zookeeper
+config:
+  servers:
+    - "localhost:2181"

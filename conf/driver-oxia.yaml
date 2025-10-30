@@ -1,0 +1,5 @@
+driver: oxia
+config:
+  serviceAddress: "localhost:6648"
+  batchLinger: 1ms
+  batchMaxCount: 1000
