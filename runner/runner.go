@@ -148,7 +148,7 @@ func (r *runner) generateTraffic() {
 	value := make([]byte, r.workload.ValueSize)
 	perWorkerRate := float64(r.workload.TargetRate) / float64(r.workload.Parallelism)
 	limiter := rate.NewLimiter(rate.Limit(perWorkerRate), int(perWorkerRate))
-	reqCh := make(chan kv, 1000)
+	reqCh := make(chan *kv, 1000)
 	go r.consumeTraffic(reqCh)
 	for {
 		if err := limiter.Wait(r.ctx); err != nil {
@@ -157,7 +157,7 @@ func (r *runner) generateTraffic() {
 		key := r.keys[rand.Intn(r.workload.KeyspaceSize)] //nolint:gosec
 		outstandingRequestGauge.Inc()
 		start := time.Now()
-		reqCh <- kv{key, value, start}
+		reqCh <- &kv{key, value, start}
 	}
 }
 
@@ -167,8 +167,8 @@ type result struct {
 	start      time.Time
 }
 
-func (r *runner) consumeTraffic(reqCh <-chan kv) {
-	resultCh := make(chan result)
+func (r *runner) consumeTraffic(reqCh <-chan *kv) {
+	resultCh := make(chan *result)
 	go r.handleResult(resultCh)
 	for {
 		select {
@@ -185,7 +185,7 @@ func (r *runner) consumeTraffic(reqCh <-chan kv) {
 				latencyCh = r.writeLatencyCh
 			}
 
-			resultCh <- result{
+			resultCh <- &result{
 				kvResultCh: ch,
 				latencyCh:  latencyCh,
 				start:      req.start,
@@ -196,17 +196,16 @@ func (r *runner) consumeTraffic(reqCh <-chan kv) {
 	}
 }
 
-func (r *runner) handleResult(resultCh <-chan result) {
+func (r *runner) handleResult(resultCh <-chan *result) {
 	for {
 		select {
 		case result := <-resultCh:
 			if err := <-result.kvResultCh; err != nil {
 				slog.Error("Error", "error", err)
-				result.latencyCh <- time.Since(result.start).Milliseconds()
 				r.periodStats.failedOps.Add(1)
 				r.totalStats.failedOps.Add(1)
 			} else {
-				result.latencyCh <- time.Since(result.start).Milliseconds()
+				result.latencyCh <- time.Since(result.start).Microseconds()
 			}
 		case <-r.ctx.Done():
 			return
