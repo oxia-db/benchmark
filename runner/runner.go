@@ -138,47 +138,79 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 	}
 }
 
+type kv struct {
+	key   string
+	value []byte
+	start time.Time
+}
+
 func (r *runner) generateTraffic() {
 	value := make([]byte, r.workload.ValueSize)
 	perWorkerRate := float64(r.workload.TargetRate) / float64(r.workload.Parallelism)
 	limiter := rate.NewLimiter(rate.Limit(perWorkerRate), int(perWorkerRate))
-
+	reqCh := make(chan kv, 1000)
+	go r.consumeTraffic(reqCh)
 	for {
 		if err := limiter.Wait(r.ctx); err != nil {
 			return
 		}
-
 		key := r.keys[rand.Intn(r.workload.KeyspaceSize)] //nolint:gosec
-
 		outstandingRequestGauge.Inc()
 		start := time.Now()
+		reqCh <- kv{key, value, start}
+	}
+}
 
-		var ch <-chan error
-		var latencyCh chan int64
-		if rand.Float64() < r.workload.ReadRatio {
-			ch = r.driver.Get(key)
-			latencyCh = r.readLatencyCh
-		} else {
-			ch = r.driver.Put(key, value)
-			latencyCh = r.writeLatencyCh
+type result struct {
+	kvResultCh <-chan error
+	latencyCh  chan<- int64
+	start      time.Time
+}
+
+func (r *runner) consumeTraffic(reqCh <-chan kv) {
+	resultCh := make(chan result)
+	go r.handleResult(resultCh)
+	for {
+		select {
+		case req := <-reqCh:
+			key := req.key
+			value := req.value
+			var ch <-chan error
+			var latencyCh chan int64
+			if rand.Float64() < r.workload.ReadRatio {
+				ch = r.driver.Get(key)
+				latencyCh = r.readLatencyCh
+			} else {
+				ch = r.driver.Put(key, value)
+				latencyCh = r.writeLatencyCh
+			}
+
+			resultCh <- result{
+				kvResultCh: ch,
+				latencyCh:  latencyCh,
+				start:      req.start,
+			}
+		case <-r.ctx.Done():
+			return
 		}
+	}
+}
 
-		go func() {
-			err := <-ch
-			if err != nil {
-				slog.Warn(
-					"Operation has failed",
-					slog.Any("error", err),
-					slog.String("key", key),
-				)
+func (r *runner) handleResult(resultCh <-chan result) {
+	for {
+		select {
+		case result := <-resultCh:
+			if err := <-result.kvResultCh; err != nil {
+				slog.Error("Error", "error", err)
+				result.latencyCh <- time.Since(result.start).Milliseconds()
 				r.periodStats.failedOps.Add(1)
 				r.totalStats.failedOps.Add(1)
 			} else {
-				latencyCh <- time.Since(start).Microseconds()
+				result.latencyCh <- time.Since(result.start).Milliseconds()
 			}
-
-			outstandingRequestGauge.Dec()
-		}()
+		case <-r.ctx.Done():
+			return
+		}
 	}
 }
 
