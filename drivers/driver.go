@@ -14,12 +14,20 @@
 
 package drivers
 
-import "io"
+import (
+	"io"
+	"time"
+)
+
+type KVResult struct {
+	Err error
+	End time.Time
+}
 
 type KVStoreDriver interface {
 	Init(config map[string]any) error
-	Put(key string, value []byte) <-chan error
-	Get(key string) <-chan error
+	Put(key string, value []byte) <-chan *KVResult
+	Get(key string) <-chan *KVResult
 
 	io.Closer
 }

@@ -79,20 +79,20 @@ func (d *EtcdDriver) Init(cfg map[string]any) error {
 	return nil
 }
 
-func (d *EtcdDriver) Put(key string, value []byte) <-chan error {
-	ch := make(chan error)
+func (d *EtcdDriver) Put(key string, value []byte) <-chan *drivers.KVResult {
+	ch := make(chan *drivers.KVResult)
 	go func() {
 		_, err := d.client.Put(context.Background(), key, string(value))
-		ch <- err
+		ch <- &drivers.KVResult{Err: err, End: time.Now()}
 	}()
 	return ch
 }
 
-func (d *EtcdDriver) Get(key string) <-chan error {
-	ch := make(chan error)
+func (d *EtcdDriver) Get(key string) <-chan *drivers.KVResult {
+	ch := make(chan *drivers.KVResult)
 	go func() {
 		_, err := d.client.Get(context.Background(), key)
-		ch <- err
+		ch <- &drivers.KVResult{Err: err, End: time.Now()}
 	}()
 	return ch
 }

@@ -62,29 +62,29 @@ func (o *OxiaDriver) Init(conf map[string]any) error {
 	return nil
 }
 
-func (o *OxiaDriver) Put(key string, value []byte) <-chan error {
+func (o *OxiaDriver) Put(key string, value []byte) <-chan *drivers.KVResult {
 	chRes := o.client.Put(key, value)
-	chErr := make(chan error)
+	chErr := make(chan *drivers.KVResult)
 
 	go func() {
 		pr := <-chRes
-		chErr <- pr.Err
+		chErr <- &drivers.KVResult{Err: pr.Err, End: time.Now()}
 		close(chErr)
 	}()
 
 	return chErr
 }
 
-func (o *OxiaDriver) Get(key string) <-chan error {
+func (o *OxiaDriver) Get(key string) <-chan *drivers.KVResult {
 	chRes := o.client.Get(key)
-	chErr := make(chan error)
+	chErr := make(chan *drivers.KVResult)
 
 	go func() {
 		pr := <-chRes
 		if errors.Is(pr.Err, oxia.ErrKeyNotFound) {
-			chErr <- nil
+			chErr <- &drivers.KVResult{Err: nil, End: time.Now()}
 		} else {
-			chErr <- pr.Err
+			chErr <- &drivers.KVResult{Err: pr.Err, End: time.Now()}
 		}
 		close(chErr)
 	}()
