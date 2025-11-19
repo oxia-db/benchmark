@@ -64,38 +64,38 @@ func (z *ZooKeeperDriver) Init(cfg map[string]any) error {
 	return nil
 }
 
-func (z *ZooKeeperDriver) Put(key string, value []byte) <-chan error {
-	ch := make(chan error, 1)
+func (z *ZooKeeperDriver) Put(key string, value []byte) <-chan *drivers.KVResult {
+	ch := make(chan *drivers.KVResult, 1)
 	go func() {
 		// interpret “key” as ZK path
 		path := fmt.Sprintf("/test/%s", key)
 
 		_, err := z.zkc.Set(path, value, -1)
 		if !errors.Is(err, zk.ErrNoNode) {
-			ch <- err
+			ch <- &drivers.KVResult{Err: err, End: time.Now()}
 			return
 		}
 
 		// Try to create if it doesn't exist
 		_, err = z.zkc.Create(path, value, 0, zk.WorldACL(zk.PermAll))
 		if !errors.Is(err, zk.ErrNodeExists) {
-			ch <- err
+			ch <- &drivers.KVResult{Err: err, End: time.Now()}
 			return
 		}
-		ch <- nil
+		ch <- &drivers.KVResult{Err: nil, End: time.Now()}
 	}()
 	return ch
 }
 
-func (z *ZooKeeperDriver) Get(key string) <-chan error {
-	ch := make(chan error, 1)
+func (z *ZooKeeperDriver) Get(key string) <-chan *drivers.KVResult {
+	ch := make(chan *drivers.KVResult, 1)
 	go func() {
 		path := fmt.Sprintf("/test/%s", key)
 		_, _, err := z.zkc.Get(path)
 		if !errors.Is(err, zk.ErrNoNode) {
-			ch <- err
+			ch <- &drivers.KVResult{Err: err, End: time.Now()}
 		} else {
-			ch <- nil
+			ch <- &drivers.KVResult{Err: nil, End: time.Now()}
 		}
 	}()
 	return ch
