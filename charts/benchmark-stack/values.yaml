@@ -1,0 +1,106 @@
+
+global:
+  security:
+    allowInsecureImages: true
+# Oxia cluster configuration
+
+oxia-cluster:
+  enabled: true
+  replicationFactor: 3
+  initialShardCount: 32
+  coordinator:
+    cpu: 200m
+    memory: 512Mi
+  server:
+    replicas: 5
+    cpu: 200m
+    memory: 512Mi
+    storage: 10Gi
+  image:
+    repository: oxia/oxia
+    tag: 0.15.0
+    pullPolicy: IfNotPresent
+  pprofEnabled: true
+  monitoringEnabled: true
+
+
+
+# Zookeeper cluster configuration
+zookeeper:
+  enabled: true
+  replicaCount: 5
+  persistence:
+    enabled: true
+    size: 10Gi
+  image:
+    repository: bitnamilegacy/zookeeper
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+
+# ETCD cluster configuration
+etcd:
+  enabled: true
+  replicaCount: 5
+  persistence:
+    enabled: true
+    size: 10Gi
+  auth:
+    token:
+      enabled: false
+  image:
+    repository: bitnamilegacy/etcd
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+  preUpgradeJob:
+    enabled: false
+
+# workload
+workload:
+  readRatio: 0.05
+  keyspaceSize: 10000
+  valueSize: 128
+  targetRate: 100
+  duration: 90s
+  parallelism: 1
+
+# workers
+workers:
+  - name: oxia-worker
+    parallelism: 1
+    cpu: 200m
+    memory: 512Mi
+    driverConfig:
+      driver: oxia
+      config:
+        serviceAddress: "benchmark:6648"
+        batchLinger: 1ms
+        batchMaxCount: 1000
+  - name: zookeeper-worker
+    parallelism: 1
+    cpu: 200m
+    memory: 512Mi
+    driverConfig:
+      driver: zookeeper
+      config:
+        servers:
+          - "benchmark-zookeeper:2181"
+  - name: etcd-worker
+    parallelism: 1
+    cpu: 200m
+    memory: 512Mi
+    driverConfig:
+      driver: etcd
+      config:
+        endpoints:
+          - "benchmark-etcd:2379"
+        dialTimeout: 5s
