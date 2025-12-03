@@ -18,6 +18,7 @@ spec:
       containers:
         - name: {{ .name }}
           image: "oxia/benchmark:main"
+          imagePullPolicy: Always
           resources:
             requests:
               cpu: {{ .cpu }}
