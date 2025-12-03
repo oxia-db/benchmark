@@ -1,0 +1,22 @@
+apiVersion: v2
+name: benchmark-stack
+description: Oxia Benchmark stack helm charts
+type: application
+version: 0.1.0
+appVersion: "1.16.0"
+
+
+
+dependencies:
+-   name: zookeeper
+    version: 13.8.7
+    repository: https://charts.bitnami.com/bitnami
+    condition: zookeeper.enabled
+-   name: etcd
+    version: 12.0.8
+    repository: https://charts.bitnami.com/bitnami
+    condition: etcd.enabled
+-   name: oxia-cluster
+    version: 0.0.3
+    repository: https://oxia-db.github.io/helm-charts/
+    condition: oxia-cluster.enabled

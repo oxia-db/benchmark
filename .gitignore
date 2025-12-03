@@ -42,3 +42,6 @@ go.work.sum
 
 build
 .idea
+
+*.tgz
+.DS_Store

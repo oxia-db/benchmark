@@ -1,0 +1,48 @@
+{{- range .Values.workers }}
+---
+# Deployment for worker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+spec:
+  replicas: {{ .parallelism | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: "oxia/benchmark-worker:main"
+          resources:
+            requests:
+              cpu: {{ .cpu }}
+              memory: {{ .memory }}
+            limits:
+              cpu: {{ .cpu }}
+              memory: {{ .memory }}
+          args:
+            - "--driver-config"
+            - "/etc/{{ .name }}-driver/driver-config.yaml"
+            - "--workload"
+            - "/etc/workload/workload.yaml"
+          volumeMounts:
+            - name: driver-config
+              mountPath: /etc/{{ .name }}-driver
+              readOnly: true
+            - name: workload-config
+              mountPath: /etc/workload
+              readOnly: true
+      volumes:
+        - name: driver-config
+          configMap:
+            name: {{ .name }}-driver-config
+        - name: workload-config
+          configMap:
+            name: workload-config
+
+{{- end }}
