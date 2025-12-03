@@ -18,7 +18,7 @@ oxia-cluster:
     storage: 10Gi
   image:
     repository: oxia/oxia
-    tag: 0.15.0
+    tag: 0.15.1
     pullPolicy: IfNotPresent
   pprofEnabled: true
   monitoringEnabled: true

@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: {{ .name }}
-          image: "oxia/benchmark-worker:main"
+          image: "oxia/benchmark:main"
           resources:
             requests:
               cpu: {{ .cpu }}

@@ -12,12 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-bookworm AS builder
 WORKDIR /app
 COPY . .
-RUN go build -o oxia-benchmark ./cmd/oxia-benchmark
+RUN mkdir binary
+RUN go build -o /app/binary/oxia-benchmark  ./cmd/oxia-benchmark
+RUN cd /app/drivers/oxia && go build -buildmode=plugin -o /app/binary/driver-oxia.so .
+RUN cd /app/drivers/etcd && go build -buildmode=plugin -o /app/binary/driver-etcd.so .
+RUN cd /app/drivers/zookeeper && go build -buildmode=plugin -o /app/binary/driver-zookeeper.so .
 
+FROM debian:bookworm-slim
 
-FROM alpine:3.22
-COPY --from=builder /app/oxia-benchmark /usr/local/bin/oxia-benchmark
-ENTRYPOINT ["oxia-benchmark"]
+WORKDIR /bench
+COPY --from=builder /app/binary/ /bench/
+ENTRYPOINT ["/bench/oxia-benchmark"]

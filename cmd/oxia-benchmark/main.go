@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	drivers2 "oxia-benchmark/drivers"
 	runner2 "oxia-benchmark/runner"
@@ -49,6 +50,7 @@ func init() {
 
 func runBenchmark(cmd *cobra.Command, args []string) error {
 	logging.ConfigureLogger()
+	log := slog.With()
 
 	metrics, err := metric.Start(metricsAddr)
 	if err != nil {
@@ -60,10 +62,12 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	log.Info("Load driver configuration", slog.Any("driverConfig", driverConf))
 	wl, err := runner2.Load(workloadCfgPath)
 	if err != nil {
 		return err
 	}
+	log.Info("Load workload configuration", slog.Any("workloadConfig", driverConf))
 	drv, err := drivers2.Build(driverConf)
 	if err != nil {
 		return err
