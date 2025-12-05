@@ -67,7 +67,7 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	log.Info("Load workload configuration", slog.Any("workloadConfig", driverConf))
+	log.Info("Load workload configuration", slog.Any("workloadConfig", wl))
 	drv, err := drivers2.Build(driverConf)
 	if err != nil {
 		return err
