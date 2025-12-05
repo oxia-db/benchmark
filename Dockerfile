@@ -15,11 +15,11 @@
 FROM golang:1.25-bookworm AS builder
 WORKDIR /app
 COPY . .
-RUN mkdir binary
+RUN mkdir -p binary/build
 RUN go build -o /app/binary/oxia-benchmark  ./cmd/oxia-benchmark
-RUN cd /app/drivers/oxia && go build -buildmode=plugin -o /app/binary/driver-oxia.so .
-RUN cd /app/drivers/etcd && go build -buildmode=plugin -o /app/binary/driver-etcd.so .
-RUN cd /app/drivers/zookeeper && go build -buildmode=plugin -o /app/binary/driver-zookeeper.so .
+RUN cd /app/drivers/oxia && go build -buildmode=plugin -o /app/binary/build/driver-oxia.so .
+RUN cd /app/drivers/etcd && go build -buildmode=plugin -o /app/binary/build/driver-etcd.so .
+RUN cd /app/drivers/zookeeper && go build -buildmode=plugin -o /app/binary/build/driver-zookeeper.so .
 
 FROM debian:bookworm-slim
 
