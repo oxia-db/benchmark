@@ -37,7 +37,6 @@ func (o *OxiaDriver) Init(conf map[string]any) error {
 	)
 
 	var clientOptions []oxia.ClientOption
-
 	if ns, ok := conf["namespace"].(string); ok {
 		clientOptions = append(clientOptions, oxia.WithNamespace(ns))
 	}
@@ -54,8 +53,13 @@ func (o *OxiaDriver) Init(conf map[string]any) error {
 		clientOptions = append(clientOptions, oxia.WithMaxRequestsPerBatch(bmc))
 	}
 
+	serviceAddress := "localhost:6648"
+	if sa, ok := conf["serviceAddress"].(string); ok {
+		serviceAddress = sa
+	}
+
 	var err error
-	if o.client, err = oxia.NewAsyncClient("localhost:6648", clientOptions...); err != nil {
+	if o.client, err = oxia.NewAsyncClient(serviceAddress, clientOptions...); err != nil {
 		return err
 	}
 

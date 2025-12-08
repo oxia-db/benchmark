@@ -50,6 +50,9 @@ etcd:
     enabled: true
     size: 10Gi
   auth:
+    rbac:
+      create: false
+      allowNoneAuthentication: true
     token:
       enabled: false
   image:
