@@ -22,12 +22,19 @@ import (
 )
 
 type Workload struct {
-	ReadRatio    float64       `yaml:"readRatio"`
-	KeyspaceSize int           `yaml:"keyspaceSize"`
-	ValueSize    int           `yaml:"valueSize"`
-	TargetRate   float64       `yaml:"targetRate"`
-	Duration     time.Duration `yaml:"duration"`
-	Parallelism  int           `yaml:"parallelism"`
+	ReadRatio       float64       `yaml:"readRatio"`
+	KeyspaceSize    uint64        `yaml:"keyspaceSize"`
+	KeyDistribution string        `yaml:"keyDistribution"`
+	ValueSize       int           `yaml:"valueSize"`
+	TargetRate      float64       `yaml:"targetRate"`
+	Duration        time.Duration `yaml:"duration"`
+	Parallelism     int           `yaml:"parallelism"`
+}
+
+func (w *Workload) WithDefault() {
+	if w.KeyDistribution == "" {
+		w.KeyDistribution = "uniform"
+	}
 }
 
 func Load(path string) (*Workload, error) {
@@ -39,5 +46,6 @@ func Load(path string) (*Workload, error) {
 	if err := yaml.Unmarshal(data, &w); err != nil {
 		return nil, err
 	}
+	w.WithDefault()
 	return &w, nil
 }

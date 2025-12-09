@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"oxia-benchmark/drivers"
+	"oxia-benchmark/runner/sequence"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,10 +40,10 @@ var (
 )
 
 type runner struct {
-	workload *Workload
-	driver   drivers.KVStoreDriver
-	keys     []string
-	limiter  *rate.Limiter
+	workload          *Workload
+	driver            drivers.KVStoreDriver
+	sequenceGenerator sequence.Generator
+	limiter           *rate.Limiter
 
 	writeLatencyCh  chan int64
 	readLatencyCh   chan int64
@@ -68,12 +69,15 @@ type stats struct {
 func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 	slog.Info("Running workload", slog.Any("workload", *wl))
 
+	sequenceGenerator := sequence.NewGenerator(wl.KeyDistribution, wl.KeyspaceSize)
+
 	r := &runner{
-		workload:       wl,
-		driver:         driver,
-		limiter:        rate.NewLimiter(rate.Limit(wl.TargetRate), int(wl.TargetRate)),
-		writeLatencyCh: make(chan int64, 1000),
-		readLatencyCh:  make(chan int64, 1000),
+		workload:          wl,
+		sequenceGenerator: sequenceGenerator,
+		driver:            driver,
+		limiter:           rate.NewLimiter(rate.Limit(wl.TargetRate), int(wl.TargetRate)),
+		writeLatencyCh:    make(chan int64, 1000),
+		readLatencyCh:     make(chan int64, 1000),
 		periodStats: stats{
 			writeLatency: quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
 			readLatency:  quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
@@ -85,11 +89,6 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 	}
 
 	r.ctx, r.cancel = context.WithCancel(context.Background())
-
-	r.keys = make([]string, wl.KeyspaceSize)
-	for i := 0; i < wl.KeyspaceSize; i++ {
-		r.keys[i] = fmt.Sprintf("key-%016d", i)
-	}
 
 	testStart := time.Now()
 	statsTickerPeriod := 10 * time.Second
@@ -151,7 +150,7 @@ type kvRes struct {
 
 func (r *runner) generateTraffic() {
 	value := make([]byte, r.workload.ValueSize)
-	perWorkerRate := float64(r.workload.TargetRate) / float64(r.workload.Parallelism)
+	perWorkerRate := r.workload.TargetRate / float64(r.workload.Parallelism)
 	limiter := rate.NewLimiter(rate.Limit(perWorkerRate), int(perWorkerRate))
 	reqCh := make(chan *kvReq, 1000)
 	defer close(reqCh)
@@ -160,7 +159,7 @@ func (r *runner) generateTraffic() {
 		if err := limiter.Wait(r.ctx); err != nil {
 			return
 		}
-		key := r.keys[rand.Intn(r.workload.KeyspaceSize)] //nolint:gosec
+		key := fmt.Sprintf("k-%016d", r.sequenceGenerator.Next())
 		outstandingRequestGauge.Inc()
 		reqCh <- &kvReq{key, value}
 	}
