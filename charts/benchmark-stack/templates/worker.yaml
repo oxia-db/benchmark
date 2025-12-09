@@ -22,6 +22,9 @@ spec:
         - name: {{ .name }}
           image: "oxia/benchmark:main"
           imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: "metrics"
           resources:
             requests:
               cpu: {{ .cpu }}

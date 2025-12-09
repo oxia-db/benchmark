@@ -74,7 +74,7 @@ workload:
   keyDistribution: uniform
   valueSize: 128
   targetRate: 100
-  duration: 90s
+  duration: 180m
   parallelism: 1
 
 # workers
