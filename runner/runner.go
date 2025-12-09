@@ -143,9 +143,10 @@ type kvReq struct {
 }
 
 type kvRes struct {
-	kvResCh   <-chan *drivers.KVResult
-	latencyCh chan<- int64
-	start     time.Time
+	kvResCh      <-chan *drivers.KVResult
+	latencyCh    chan<- int64
+	start        time.Time
+	latencyTimer *metric.Timer
 }
 
 func (r *runner) generateTraffic() {
@@ -176,18 +177,22 @@ func (r *runner) consumeTraffic(reqCh <-chan *kvReq) {
 			var ch <-chan *drivers.KVResult
 			var latencyCh chan int64
 			start := time.Now()
+			var timer metric.Timer
+
 			if rand.Float64() < r.workload.ReadRatio {
 				ch = r.driver.Get(key)
 				latencyCh = r.readLatencyCh
+				timer = opReadLatency.Timer()
 			} else {
 				ch = r.driver.Put(key, value)
 				latencyCh = r.writeLatencyCh
+				timer = opWriteLatency.Timer()
 			}
-
 			resCh <- &kvRes{
-				kvResCh:   ch,
-				latencyCh: latencyCh,
-				start:     start,
+				kvResCh:      ch,
+				latencyCh:    latencyCh,
+				start:        start,
+				latencyTimer: &timer,
 			}
 		case <-r.ctx.Done():
 			close(resCh)
@@ -207,6 +212,8 @@ func (r *runner) handleResult(resCh <-chan *kvRes) {
 			} else {
 				result.latencyCh <- time.Since(res.End).Microseconds()
 			}
+			outstandingRequestGauge.Dec()
+			result.latencyTimer.Done()
 		case <-r.ctx.Done():
 			return
 		}

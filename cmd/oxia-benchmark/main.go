@@ -48,7 +48,7 @@ func init() {
 	cmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "m", fmt.Sprintf("0.0.0.0:%d", constant.DefaultMetricsPort), "Metrics service bind address")
 }
 
-func runBenchmark(cmd *cobra.Command, args []string) error {
+func runBenchmark(*cobra.Command, []string) error {
 	logging.ConfigureLogger()
 	log := slog.With()
 
