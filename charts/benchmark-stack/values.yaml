@@ -67,15 +67,17 @@ etcd:
   preUpgradeJob:
     enabled: false
 
-# workload
+# workload A
 workload:
   readRatio: 0.0
-  keyspaceSize: 10000
+  keyspaceSize: 1000000
   keyDistribution: zipf
   valueSize: 64
   targetRate: 1000
   duration: 60m
-  parallelism: 1
+  parallelism: 10
+
+
 
 # workers
 workers:
