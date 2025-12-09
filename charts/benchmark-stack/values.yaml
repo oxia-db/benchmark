@@ -69,7 +69,7 @@ etcd:
 
 # workload
 workload:
-  readRatio: 0
+  readRatio: 0.0
   keyspaceSize: 10000
   keyDistribution: zipf
   valueSize: 64
