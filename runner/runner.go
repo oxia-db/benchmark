@@ -50,6 +50,7 @@ type runner struct {
 	opReadLatency           metric.LatencyHistogram
 	opWriteLatency          metric.LatencyHistogram
 	outstandingRequestGauge metric.UpDownCounter
+	opFailed                metric.Counter
 }
 
 type stats struct {
@@ -87,6 +88,7 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 				"type":         "read",
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
+				"readRatio":    wl.ReadRatio,
 			}),
 		opWriteLatency: metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
 			map[string]any{
@@ -94,12 +96,22 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 				"type":         "write",
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
+				"readRatio":    wl.ReadRatio,
 			}),
 		outstandingRequestGauge: metric.NewUpDownCounter("kv.op.outstanding", "Count of outstanding operations", "count",
 			map[string]any{
 				"driver":       driver.Name(),
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
+				"readRatio":    wl.ReadRatio,
+			},
+		),
+		opFailed: metric.NewCounter("kv.op.failed", "Count of failed write operations", "count",
+			map[string]any{
+				"driver":       driver.Name(),
+				"valueSize":    wl.ValueSize,
+				"distribution": wl.KeyDistribution,
+				"readRatio":    wl.ReadRatio,
 			},
 		),
 	}
@@ -225,6 +237,7 @@ func (r *runner) handleResult(resCh <-chan *kvRes) {
 				slog.Error("Error", "error", res.Err)
 				r.periodStats.failedOps.Add(1)
 				r.totalStats.failedOps.Add(1)
+				r.opFailed.Inc()
 			} else {
 				result.latencyCh <- time.Since(res.End).Microseconds()
 			}
