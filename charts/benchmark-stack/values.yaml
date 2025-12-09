@@ -69,12 +69,12 @@ etcd:
 
 # workload
 workload:
-  readRatio: 0.05
+  readRatio: 0
   keyspaceSize: 10000
-  keyDistribution: uniform
-  valueSize: 128
-  targetRate: 100
-  duration: 180m
+  keyDistribution: order
+  valueSize: 64
+  targetRate: 1000
+  duration: 60m
   parallelism: 1
 
 # workers
