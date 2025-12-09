@@ -71,7 +71,7 @@ etcd:
 workload:
   readRatio: 0
   keyspaceSize: 10000
-  keyDistribution: order
+  keyDistribution: zipf
   valueSize: 64
   targetRate: 1000
   duration: 60m
