@@ -32,6 +32,10 @@ type ZooKeeperDriver struct {
 	zkc *zk.Conn
 }
 
+func (z *ZooKeeperDriver) Name() string {
+	return "zookeeper"
+}
+
 func (z *ZooKeeperDriver) Init(cfg map[string]any) error {
 	ss, ok := cfg["servers"].([]any)
 	if !ok {

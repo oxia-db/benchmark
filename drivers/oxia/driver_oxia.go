@@ -31,6 +31,10 @@ type OxiaDriver struct {
 	client oxia.AsyncClient
 }
 
+func (o *OxiaDriver) Name() string {
+	return "oxia"
+}
+
 func (o *OxiaDriver) Init(conf map[string]any) error {
 	slog.Info("Init Oxia Driver",
 		slog.Any("conf", conf),

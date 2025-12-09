@@ -25,6 +25,7 @@ type KVResult struct {
 }
 
 type KVStoreDriver interface {
+	Name() string
 	Init(config map[string]any) error
 	Put(key string, value []byte) <-chan *KVResult
 	Get(key string) <-chan *KVResult

@@ -35,6 +35,10 @@ type EtcdDriver struct {
 	client *clientv3.Client
 }
 
+func (d *EtcdDriver) Name() string {
+	return "etcd"
+}
+
 func (d *EtcdDriver) Init(cfg map[string]any) error {
 	endpointsAny, ok := cfg["endpoints"]
 	if !ok {

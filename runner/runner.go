@@ -30,15 +30,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-var (
-	opReadLatency = metric.NewLatencyHistogram("kv.op.latency", "Read operation latency",
-		map[string]any{"type": "read"})
-	opWriteLatency = metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
-		map[string]any{"type": "write"})
-	outstandingRequestGauge = metric.NewUpDownCounter("kv.op.outstanding", "Count of outstanding operations", "count",
-		map[string]any{})
-)
-
 type runner struct {
 	workload          *Workload
 	driver            drivers.KVStoreDriver
@@ -55,6 +46,10 @@ type runner struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	opReadLatency           metric.LatencyHistogram
+	opWriteLatency          metric.LatencyHistogram
+	outstandingRequestGauge metric.UpDownCounter
 }
 
 type stats struct {
@@ -86,6 +81,27 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 			writeLatency: quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
 			readLatency:  quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
 		},
+		opReadLatency: metric.NewLatencyHistogram("kv.op.latency", "Read operation latency",
+			map[string]any{
+				"driver":       driver.Name(),
+				"type":         "read",
+				"valueSize":    wl.ValueSize,
+				"distribution": wl.KeyDistribution,
+			}),
+		opWriteLatency: metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
+			map[string]any{
+				"driver":       driver.Name(),
+				"type":         "write",
+				"valueSize":    wl.ValueSize,
+				"distribution": wl.KeyDistribution,
+			}),
+		outstandingRequestGauge: metric.NewUpDownCounter("kv.op.outstanding", "Count of outstanding operations", "count",
+			map[string]any{
+				"driver":       driver.Name(),
+				"valueSize":    wl.ValueSize,
+				"distribution": wl.KeyDistribution,
+			},
+		),
 	}
 
 	r.ctx, r.cancel = context.WithCancel(context.Background())
@@ -161,7 +177,7 @@ func (r *runner) generateTraffic() {
 			return
 		}
 		key := fmt.Sprintf("k-%016d", r.sequenceGenerator.Next())
-		outstandingRequestGauge.Inc()
+		r.outstandingRequestGauge.Inc()
 		reqCh <- &kvReq{key, value}
 	}
 }
@@ -182,11 +198,11 @@ func (r *runner) consumeTraffic(reqCh <-chan *kvReq) {
 			if rand.Float64() < r.workload.ReadRatio {
 				ch = r.driver.Get(key)
 				latencyCh = r.readLatencyCh
-				timer = opReadLatency.Timer()
+				timer = r.opReadLatency.Timer()
 			} else {
 				ch = r.driver.Put(key, value)
 				latencyCh = r.writeLatencyCh
-				timer = opWriteLatency.Timer()
+				timer = r.opWriteLatency.Timer()
 			}
 			resCh <- &kvRes{
 				kvResCh:      ch,
@@ -212,7 +228,7 @@ func (r *runner) handleResult(resCh <-chan *kvRes) {
 			} else {
 				result.latencyCh <- time.Since(res.End).Microseconds()
 			}
-			outstandingRequestGauge.Dec()
+			r.outstandingRequestGauge.Dec()
 			result.latencyTimer.Done()
 		case <-r.ctx.Done():
 			return
