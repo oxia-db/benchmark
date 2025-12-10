@@ -18,6 +18,24 @@ spec:
       labels:
         app: {{ .name }}
     spec:
+      initContainers:
+        - name: wait-{{.name}}
+          image: bitnami/kubectl:latest
+          command:
+            - sh
+            - -c
+            - |
+              if [ "{{.driverConfig.driver}}" = "oxia" ]; then
+                STS_NAME="benchmark"
+              else
+                STS_NAME="benchmark-{{.driverConfig.driver}}"
+              fi
+
+              echo "Waiting for Target Cluster $STS_NAME to be ready..."
+              kubectl wait sts/$STS_NAME \
+                --for=jsonpath='{.status.readyReplicas}'=$(kubectl get sts $STS_NAME -o jsonpath='{.spec.replicas}') \
+                --timeout=300s
+              echo "StatefulSet $STS_NAME is ready!"
       containers:
         - name: {{ .name }}
           image: "oxia/benchmark:main"

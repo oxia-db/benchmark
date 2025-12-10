@@ -76,7 +76,7 @@ workload:
   valueSize: 64
   targetRate: 100000
   duration: 60m
-  parallelism: 5000
+  parallelism: 1000
 
 ### workload 2
 #workload:
