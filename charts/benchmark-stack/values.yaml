@@ -7,12 +7,12 @@ global:
 oxia-cluster:
   enabled: true
   replicationFactor: 3
-  initialShardCount: 40
+  initialShardCount: 256
   coordinator:
     cpu: "2"
     memory: 4Gi
   server:
-    replicas: 5
+    replicas: 3
     cpu: "2"
     memory: 8Gi
     storage: 128Gi
@@ -28,7 +28,7 @@ oxia-cluster:
 # Zookeeper cluster configuration
 zookeeper:
   enabled: true
-  replicaCount: 5
+  replicaCount: 3
   persistence:
     enabled: true
     size: 128Gi
@@ -45,7 +45,7 @@ zookeeper:
 # ETCD cluster configuration
 etcd:
   enabled: true
-  replicaCount: 5
+  replicaCount: 3
   persistence:
     enabled: true
     size: 128Gi
