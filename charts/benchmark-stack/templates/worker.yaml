@@ -18,6 +18,7 @@ spec:
       labels:
         app: {{ .name }}
     spec:
+      serviceAccountName: worker-sa
       initContainers:
         - name: wait-{{.name}}
           image: bitnami/kubectl:latest
