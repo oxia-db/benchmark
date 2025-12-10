@@ -12,12 +12,19 @@ type order struct {
 }
 
 func (o *order) Next() uint64 {
-	s := o.sequence.Add(1)
-	if s >= o.maxSequence {
-		o.sequence.Store(0)
-		return 0
+	for {
+		s := o.sequence.Load()
+		next := s + 1
+		if next >= o.maxSequence {
+			if o.sequence.CompareAndSwap(s, 0) {
+				return 0
+			}
+			continue
+		}
+		if o.sequence.CompareAndSwap(s, next) {
+			return next
+		}
 	}
-	return s
 }
 
 func newOrder(maxSequence uint64) Generator {
