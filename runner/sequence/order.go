@@ -1,19 +1,28 @@
 package sequence
 
+import (
+	"sync/atomic"
+)
+
 var _ Generator = &order{}
 
 type order struct {
-	sequence uint64
+	maxSequence uint64
+	sequence    atomic.Uint64
 }
 
 func (o *order) Next() uint64 {
-	sequence := o.sequence
-	o.sequence = o.sequence + 1
-	return sequence
+	s := o.sequence.Add(1)
+	if s >= o.maxSequence {
+		o.sequence.Store(0)
+		return 0
+	}
+	return s
 }
 
-func newOrder() Generator {
+func newOrder(maxSequence uint64) Generator {
 	return &order{
-		sequence: 0,
+		maxSequence: maxSequence,
+		sequence:    atomic.Uint64{},
 	}
 }

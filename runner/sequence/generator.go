@@ -19,7 +19,7 @@ func NewGenerator(name string, maxSequence uint64) Generator {
 	case keyDistributionZipf:
 		return newZipf(maxSequence)
 	case keyDistributionOrder:
-		return newOrder()
+		return newOrder(maxSequence)
 	default:
 		panic(fmt.Sprintf("sequence generator '%s' is not supported", name))
 	}

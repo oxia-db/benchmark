@@ -7,7 +7,7 @@ global:
 oxia-cluster:
   enabled: true
   replicationFactor: 3
-  initialShardCount: 256
+  initialShardCount: 3
   coordinator:
     cpu: "2"
     memory: 4Gi
@@ -66,32 +66,46 @@ etcd:
       memory: 8Gi
   preUpgradeJob:
     enabled: false
+  extraEnvVars:
+    - name: ETCD_QUOTA_BACKEND_BYTES
+      value: "34359738368"  #32Gi = 32 * 1024 * 1024 * 1024
 
 ##  64 value
 ### workload 1
-workload:
-  readRatio: 0.0
-  keyspaceSize: 1000000
-  keyDistribution: zipf
-  valueSize: 64
-  targetRate: 100000
-  duration: 60m
-  parallelism: 1000
+#workload:
+#  readRatio: 0.0
+#  keyspaceSize: 100000
+#  keyDistribution: order
+#  valueSize: 64
+#  targetRate: 35000
+#  duration: 15m
+#  parallelism: 1000
+
 
 ### workload 2
+workload:
+  readRatio: 0.0
+  keyspaceSize: 100000
+  keyDistribution: zipf
+  valueSize: 64
+  targetRate: 35000
+  duration: 15m
+  parallelism: 1000
+
+### workload 3
 #workload:
 #  readRatio: 0.5
-#  keyspaceSize: 1000000
+#  keyspaceSize: 100000
 #  keyDistribution: zipf
 #  valueSize: 64
-#  targetRate: 1000
-#  duration: 60m
-#  parallelism: 10
+#  targetRate: 35000
+#  duration: 15m
+#  parallelism: 1000
 
 # workers
 workers:
   - name: oxia-worker
-    parallelism: 1
+    parallelism: 3
     cpu: "2"
     memory: 4Gi
     driverConfig:
@@ -101,7 +115,7 @@ workers:
         batchLinger: 1ms
         batchMaxCount: 1000
   - name: zookeeper-worker
-    parallelism: 1
+    parallelism: 3
     cpu: "2"
     memory: 4Gi
     driverConfig:
@@ -110,7 +124,7 @@ workers:
         servers:
           - "benchmark-zookeeper:2181"
   - name: etcd-worker
-    parallelism: 1
+    parallelism: 3
     cpu: "2"
     memory: 4Gi
     driverConfig:
