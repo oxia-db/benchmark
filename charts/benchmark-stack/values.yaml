@@ -7,15 +7,15 @@ global:
 oxia-cluster:
   enabled: true
   replicationFactor: 3
-  initialShardCount: 32
+  initialShardCount: 40
   coordinator:
-    cpu: 200m
-    memory: 512Mi
+    cpu: "2"
+    memory: 4Gi
   server:
     replicas: 5
-    cpu: 200m
-    memory: 512Mi
-    storage: 10Gi
+    cpu: "2"
+    memory: 8Gi
+    storage: 128Gi
   image:
     repository: oxia/oxia
     tag: 0.15.1
@@ -31,16 +31,16 @@ zookeeper:
   replicaCount: 5
   persistence:
     enabled: true
-    size: 10Gi
+    size: 128Gi
   image:
     repository: bitnamilegacy/zookeeper
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
+      cpu: "2"
+      memory: 8Gi
     limits:
-      cpu: 200m
-      memory: 512Mi
+      cpu: "2"
+      memory: 8Gi
 
 # ETCD cluster configuration
 etcd:
@@ -48,7 +48,7 @@ etcd:
   replicaCount: 5
   persistence:
     enabled: true
-    size: 10Gi
+    size: 128Gi
   auth:
     rbac:
       create: false
@@ -59,32 +59,41 @@ etcd:
     repository: bitnamilegacy/etcd
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
+      cpu: "2"
+      memory: 8Gi
     limits:
-      cpu: 200m
-      memory: 512Mi
+      cpu: "2"
+      memory: 8Gi
   preUpgradeJob:
     enabled: false
 
-# workload A
+##  64 value
+### workload 1
 workload:
   readRatio: 0.0
   keyspaceSize: 1000000
   keyDistribution: zipf
   valueSize: 64
-  targetRate: 1000
+  targetRate: 100000
   duration: 60m
-  parallelism: 10
+  parallelism: 5000
 
-
+### workload 2
+#workload:
+#  readRatio: 0.5
+#  keyspaceSize: 1000000
+#  keyDistribution: zipf
+#  valueSize: 64
+#  targetRate: 1000
+#  duration: 60m
+#  parallelism: 10
 
 # workers
 workers:
   - name: oxia-worker
     parallelism: 1
-    cpu: 200m
-    memory: 512Mi
+    cpu: "2"
+    memory: 4Gi
     driverConfig:
       driver: oxia
       config:
@@ -93,8 +102,8 @@ workers:
         batchMaxCount: 1000
   - name: zookeeper-worker
     parallelism: 1
-    cpu: 200m
-    memory: 512Mi
+    cpu: "2"
+    memory: 4Gi
     driverConfig:
       driver: zookeeper
       config:
@@ -102,8 +111,8 @@ workers:
           - "benchmark-zookeeper:2181"
   - name: etcd-worker
     parallelism: 1
-    cpu: 200m
-    memory: 512Mi
+    cpu: "2"
+    memory: 4Gi
     driverConfig:
       driver: etcd
       config:

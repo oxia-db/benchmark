@@ -47,10 +47,12 @@ type runner struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	opReadLatency           metric.LatencyHistogram
-	opWriteLatency          metric.LatencyHistogram
+	opReadFailedLatency   metric.LatencyHistogram
+	opReadSuccessLatency  metric.LatencyHistogram
+	opWriteFailedLatency  metric.LatencyHistogram
+	opWriteSuccessLatency metric.LatencyHistogram
+
 	outstandingRequestGauge metric.UpDownCounter
-	opFailed                metric.Counter
 }
 
 type stats struct {
@@ -82,31 +84,43 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 			writeLatency: quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
 			readLatency:  quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
 		},
-		opReadLatency: metric.NewLatencyHistogram("kv.op.latency", "Read operation latency",
+		opReadFailedLatency: metric.NewLatencyHistogram("kv.op.latency", "Read operation latency",
 			map[string]any{
 				"driver":       driver.Name(),
 				"type":         "read",
+				"ok":           false,
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
 				"readRatio":    wl.ReadRatio,
 			}),
-		opWriteLatency: metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
+		opReadSuccessLatency: metric.NewLatencyHistogram("kv.op.latency", "Read operation latency",
+			map[string]any{
+				"driver":       driver.Name(),
+				"type":         "read",
+				"ok":           true,
+				"valueSize":    wl.ValueSize,
+				"distribution": wl.KeyDistribution,
+				"readRatio":    wl.ReadRatio,
+			}),
+		opWriteSuccessLatency: metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
 			map[string]any{
 				"driver":       driver.Name(),
 				"type":         "write",
+				"ok":           true,
+				"valueSize":    wl.ValueSize,
+				"distribution": wl.KeyDistribution,
+				"readRatio":    wl.ReadRatio,
+			}),
+		opWriteFailedLatency: metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
+			map[string]any{
+				"driver":       driver.Name(),
+				"type":         "write",
+				"ok":           false,
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
 				"readRatio":    wl.ReadRatio,
 			}),
 		outstandingRequestGauge: metric.NewUpDownCounter("kv.op.outstanding", "Count of outstanding operations", "count",
-			map[string]any{
-				"driver":       driver.Name(),
-				"valueSize":    wl.ValueSize,
-				"distribution": wl.KeyDistribution,
-				"readRatio":    wl.ReadRatio,
-			},
-		),
-		opFailed: metric.NewCounter("kv.op.failed", "Count of failed write operations", "count",
 			map[string]any{
 				"driver":       driver.Name(),
 				"valueSize":    wl.ValueSize,
@@ -171,10 +185,11 @@ type kvReq struct {
 }
 
 type kvRes struct {
-	kvResCh      <-chan *drivers.KVResult
-	latencyCh    chan<- int64
-	start        time.Time
-	latencyTimer *metric.Timer
+	kvResCh        <-chan *drivers.KVResult
+	latencyCh      chan<- int64
+	start          time.Time
+	successLatency *metric.Timer
+	failedLatency  *metric.Timer
 }
 
 func (r *runner) generateTraffic() {
@@ -205,22 +220,26 @@ func (r *runner) consumeTraffic(reqCh <-chan *kvReq) {
 			var ch <-chan *drivers.KVResult
 			var latencyCh chan int64
 			start := time.Now()
-			var timer metric.Timer
 
+			var successTimer metric.Timer
+			var failedTimer metric.Timer
 			if rand.Float64() < r.workload.ReadRatio {
 				ch = r.driver.Get(key)
 				latencyCh = r.readLatencyCh
-				timer = r.opReadLatency.Timer()
+				successTimer = r.opReadSuccessLatency.Timer()
+				failedTimer = r.opReadFailedLatency.Timer()
 			} else {
 				ch = r.driver.Put(key, value)
 				latencyCh = r.writeLatencyCh
-				timer = r.opWriteLatency.Timer()
+				successTimer = r.opWriteSuccessLatency.Timer()
+				failedTimer = r.opWriteFailedLatency.Timer()
 			}
 			resCh <- &kvRes{
-				kvResCh:      ch,
-				latencyCh:    latencyCh,
-				start:        start,
-				latencyTimer: &timer,
+				kvResCh:        ch,
+				latencyCh:      latencyCh,
+				start:          start,
+				successLatency: &successTimer,
+				failedLatency:  &failedTimer,
 			}
 		case <-r.ctx.Done():
 			close(resCh)
@@ -237,12 +256,12 @@ func (r *runner) handleResult(resCh <-chan *kvRes) {
 				slog.Error("Error", "error", res.Err)
 				r.periodStats.failedOps.Add(1)
 				r.totalStats.failedOps.Add(1)
-				r.opFailed.Inc()
+				result.failedLatency.Done()
 			} else {
 				result.latencyCh <- time.Since(res.End).Microseconds()
+				result.successLatency.Done()
 			}
 			r.outstandingRequestGauge.Dec()
-			result.latencyTimer.Done()
 		case <-r.ctx.Done():
 			return
 		}
