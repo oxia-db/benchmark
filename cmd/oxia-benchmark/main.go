@@ -21,7 +21,9 @@ import (
 	drivers2 "oxia-benchmark/drivers"
 	runner2 "oxia-benchmark/runner"
 	"sync"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/oxia-db/oxia/common/constant"
 	"github.com/oxia-db/oxia/common/logging"
 	"github.com/oxia-db/oxia/common/metric"
@@ -86,10 +88,11 @@ func runBenchmark(*cobra.Command, []string) error {
 	for idx := range wls.Items {
 		workload := wls.Items[idx]
 		log.Info("Starting workload ", slog.Any("workload", workload))
-		if err := runner2.Run(metadata, &workload, drv); err != nil {
-			log.Error("Workflow pipeline interrupted by error. ", slog.Any("workload", workload), slog.Any("err", err))
-			return err
-		}
+		_ = backoff.RetryNotify(func() error {
+			return runner2.Run(metadata, &workload, drv)
+		}, backoff.NewExponentialBackOff(), func(err error, duration time.Duration) {
+			log.Error("Workflow pipeline interrupted by error. ", slog.Any("workload", workload), slog.Any("err", err), slog.Any("retry-after", duration))
+		})
 		log.Info("Finish workload, try next one.", slog.Any("workload", workload))
 	}
 	log.Info("All workload finished. ")
