@@ -7,12 +7,12 @@ global:
 oxia-cluster:
   enabled: true
   replicationFactor: 3
-  initialShardCount: 5
+  initialShardCount: 10
   coordinator:
     cpu: "2"
     memory: 4Gi
   server:
-    replicas: 5
+    replicas: 10
     cpu: "2"
     memory: 8Gi
     storage: 128Gi
@@ -24,55 +24,20 @@ oxia-cluster:
   monitoringEnabled: true
 
 
+
 # Zookeeper cluster configuration
 zookeeper:
-  enabled: true
-  replicaCount: 5
-  persistence:
-    enabled: true
-    size: 128Gi
-  image:
-    repository: bitnamilegacy/zookeeper
-  resources:
-    requests:
-      cpu: "2"
-      memory: 8Gi
-    limits:
-      cpu: "2"
-      memory: 8Gi
+  enabled: false
 
 # ETCD cluster configuration
 etcd:
-  enabled: true
-  replicaCount: 5
-  persistence:
-    enabled: true
-    size: 128Gi
-  auth:
-    rbac:
-      create: false
-      allowNoneAuthentication: true
-    token:
-      enabled: false
-  image:
-    repository: bitnamilegacy/etcd
-  resources:
-    requests:
-      cpu: "2"
-      memory: 8Gi
-    limits:
-      cpu: "2"
-      memory: 8Gi
-  preUpgradeJob:
-    enabled: false
-  extraEnvVars:
-    - name: ETCD_QUOTA_BACKEND_BYTES
-      value: "34359738368"  #32Gi = 32 * 1024 * 1024 * 1024
+  enabled: false
 
+##  64 value
 workloads:
   exitWhenFinish: false
   metadata:
-    serverNum: 5
+    serverNum: 10
   items:
     # insert-only
     - readRatio: 0.0
@@ -107,35 +72,15 @@ workloads:
       duration: 15m
       parallelism: 1000
 
-
 # workers
 workers:
   - name: oxia-worker
-    parallelism: 5
+    parallelism: 10
     cpu: "2"
     memory: 4Gi
     driverConfig:
       driver: oxia
       config:
-        serviceAddress: "benchmark-5:6648"
-        batchLinger: 1ms
-        batchMaxCount: 1000
-  - name: zookeeper-worker
-    parallelism: 5
-    cpu: "2"
-    memory: 4Gi
-    driverConfig:
-      driver: zookeeper
-      config:
-        servers:
-          - "benchmark-5-zookeeper:2181"
-  - name: etcd-worker
-    parallelism: 5
-    cpu: "2"
-    memory: 4Gi
-    driverConfig:
-      driver: etcd
-      config:
-        endpoints:
-          - "benchmark-5-etcd:2379"
-        dialTimeout: 5s
+        serviceAddress: "benchmark-10:6648"
+        batchLinger: 10ms
+        batchMaxCount: 5000

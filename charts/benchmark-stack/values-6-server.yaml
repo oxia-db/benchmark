@@ -7,12 +7,12 @@ global:
 oxia-cluster:
   enabled: true
   replicationFactor: 3
-  initialShardCount: 10
+  initialShardCount: 6
   coordinator:
     cpu: "2"
     memory: 4Gi
   server:
-    replicas: 10
+    replicas: 6
     cpu: "2"
     memory: 8Gi
     storage: 128Gi
@@ -24,7 +24,6 @@ oxia-cluster:
   monitoringEnabled: true
 
 
-
 # Zookeeper cluster configuration
 zookeeper:
   enabled: false
@@ -33,11 +32,10 @@ zookeeper:
 etcd:
   enabled: false
 
-##  64 value
 workloads:
   exitWhenFinish: false
   metadata:
-    serverNum: 10
+    serverNum: 6
   items:
     # insert-only
     - readRatio: 0.0
@@ -72,15 +70,16 @@ workloads:
       duration: 15m
       parallelism: 1000
 
+
 # workers
 workers:
   - name: oxia-worker
-    parallelism: 10
+    parallelism: 6
     cpu: "2"
     memory: 4Gi
     driverConfig:
       driver: oxia
       config:
-        serviceAddress: "benchmark-10:6648"
-        batchLinger: 1ms
-        batchMaxCount: 1000
+        serviceAddress: "benchmark-5:6648"
+        batchLinger: 5ms
+        batchMaxCount: 5000

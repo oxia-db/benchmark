@@ -119,8 +119,8 @@ workers:
       driver: oxia
       config:
         serviceAddress: "benchmark-3:6648"
-        batchLinger: 1ms
-        batchMaxCount: 1000
+        batchLinger: 5ms
+        batchMaxCount: 5000
   - name: zookeeper-worker
     parallelism: 5
     cpu: "2"
