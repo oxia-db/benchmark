@@ -18,6 +18,7 @@ go 1.25
 
 require (
 	github.com/bmizerany/perks v0.0.0-20230307044200-03f9df79da1e
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/oxia-db/oxia v0.14.4
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/time v0.14.0
