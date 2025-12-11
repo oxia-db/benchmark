@@ -112,7 +112,7 @@ workloads:
 # workers
 workers:
   - name: oxia-worker
-    parallelism: 5
+    parallelism: 6
     cpu: "2"
     memory: 4Gi
     driverConfig:
@@ -122,7 +122,7 @@ workers:
         batchLinger: 5ms
         batchMaxCount: 5000
   - name: zookeeper-worker
-    parallelism: 5
+    parallelism: 6
     cpu: "2"
     memory: 4Gi
     driverConfig:
@@ -131,7 +131,7 @@ workers:
         servers:
           - "benchmark-3-zookeeper:2181"
   - name: etcd-worker
-    parallelism: 5
+    parallelism: 6
     cpu: "2"
     memory: 4Gi
     driverConfig:

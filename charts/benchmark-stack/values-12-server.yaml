@@ -7,7 +7,7 @@ global:
 oxia-cluster:
   enabled: true
   replicationFactor: 3
-  initialShardCount: 10
+  initialShardCount: 12
   coordinator:
     cpu: "2"
     memory: 4Gi
@@ -37,7 +37,7 @@ etcd:
 workloads:
   exitWhenFinish: false
   metadata:
-    serverNum: 10
+    serverNum: 12
   items:
     # insert-only
     - readRatio: 0.0
@@ -75,12 +75,12 @@ workloads:
 # workers
 workers:
   - name: oxia-worker
-    parallelism: 10
+    parallelism: 24
     cpu: "2"
     memory: 4Gi
     driverConfig:
       driver: oxia
       config:
-        serviceAddress: "benchmark-10:6648"
+        serviceAddress: "benchmark-12:6648"
         batchLinger: 10ms
         batchMaxCount: 5000

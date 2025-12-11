@@ -74,12 +74,12 @@ workloads:
 # workers
 workers:
   - name: oxia-worker
-    parallelism: 6
+    parallelism: 12
     cpu: "2"
     memory: 4Gi
     driverConfig:
       driver: oxia
       config:
-        serviceAddress: "benchmark-5:6648"
+        serviceAddress: "benchmark-6:6648"
         batchLinger: 5ms
         batchMaxCount: 5000
