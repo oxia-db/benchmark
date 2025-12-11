@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/bmizerany/perks/quantile"
-	"github.com/oxia-db/oxia/common/channel"
 	"github.com/oxia-db/oxia/common/metric"
 	"golang.org/x/time/rate"
 )
@@ -211,7 +210,13 @@ func (r *runner) generateTraffic() {
 		}
 		key := fmt.Sprintf("k-%016d", r.sequenceGenerator.Next())
 		r.outstandingRequestGauge.Inc()
-		channel.PushNoBlock(reqCh, &kvReq{key, value})
+
+		select {
+		case reqCh <- &kvReq{key, value}:
+		case <-r.ctx.Done():
+			return
+		}
+
 	}
 }
 
@@ -242,13 +247,17 @@ func (r *runner) consumeTraffic(reqCh <-chan *kvReq) {
 				successTimer = r.opWriteSuccessLatency.Timer()
 				failedTimer = r.opWriteFailedLatency.Timer()
 			}
-			channel.PushNoBlock(resCh, &kvRes{
+			select {
+			case resCh <- &kvRes{
 				kvResCh:        ch,
 				latencyCh:      latencyCh,
 				start:          start,
 				successLatency: &successTimer,
 				failedLatency:  &failedTimer,
-			})
+			}:
+			case <-r.ctx.Done():
+				return
+			}
 		case <-r.ctx.Done():
 			return
 		}
