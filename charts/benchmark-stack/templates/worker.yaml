@@ -54,20 +54,20 @@ spec:
           args:
             - "--driver-config"
             - "/etc/{{ .name }}-driver/driver-config.yaml"
-            - "--workload"
-            - "/etc/workload/workload.yaml"
+            - "--workloads"
+            - "/etc/workloads/workloads.yaml"
           volumeMounts:
             - name: driver-config
               mountPath: /etc/{{ .name }}-driver
               readOnly: true
-            - name: workload-config
-              mountPath: /etc/workload
+            - name: workloads-config
+              mountPath: /etc/workloads
               readOnly: true
       volumes:
         - name: driver-config
           configMap:
             name: {{ $.Release.Name }}-{{ .name }}-driver-config
-        - name: workload-config
+        - name: workloads-config
           configMap:
-            name: {{ $.Release.Name }}-workload-config
+            name: {{ $.Release.Name }}-workloads-config
 {{- end }}

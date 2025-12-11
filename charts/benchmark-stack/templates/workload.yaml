@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-workload-config
+  name: {{ .Release.Name }}-workloads-config
 data:
   workloads.yaml: |
 {{ toYaml .Values.workloads | indent 4 }}
