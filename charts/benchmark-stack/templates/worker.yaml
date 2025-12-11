@@ -36,6 +36,9 @@ spec:
               kubectl wait sts/$STS_NAME \
                 --for=jsonpath='{.status.readyReplicas}'=$(kubectl get sts $STS_NAME -o jsonpath='{.spec.replicas}') \
                 --timeout=300s
+
+              echo "Sleeping 20s to let cluster bootstrap..."
+              sleep 30
               echo "StatefulSet $STS_NAME is ready!"
       containers:
         - name: {{ $.Release.Name }}-{{ .name }}

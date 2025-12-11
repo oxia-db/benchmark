@@ -107,6 +107,14 @@ workloads:
       targetRate: 40000
       duration: 15m
       parallelism: 1000
+    # YCSB D (95% read, uniform distribution)
+    - readRatio: 0.95
+      keyspaceSize: 10000000
+      keyDistribution: uniform
+      valueSize: 64
+      targetRate: 40000
+      duration: 15m
+      parallelism: 1000
 
 
 # workers
