@@ -1,8 +1,36 @@
-
-readRatio: 0.5
-keyspaceSize: 10000
-keyDistribution: order
-valueSize: 64
-targetRate: 10000
-duration: 90s
-parallelism: 1
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+items:
+  # insert-only
+  - readRatio: 0.0
+    keyspaceSize: 100000    # 10M keys
+    keyDistribution: order
+    valueSize: 64
+    targetRate: 40000
+    duration: 10s
+    parallelism: 1
+  # YCSB X (100 % updates, zipf distribution)
+  - readRatio: 0.0
+    keyspaceSize: 100000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 40000
+    duration: 10s
+    parallelism: 1
+  # YCSB A (50% updates, 50% read, zipf distribution)
+  - readRatio: 0.5
+    keyspaceSize: 100000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 40000
+    duration: 10s
+    parallelism: 1
+  # YCSB C (100% read, zipf distribution)
+  - readRatio: 1
+    keyspaceSize: 100000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 40000
+    duration: 10s
+    parallelism: 1

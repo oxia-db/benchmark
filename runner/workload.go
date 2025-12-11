@@ -21,6 +21,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type Metadata struct {
+	ServerNum int `yaml:"serverNum"`
+}
+
 type Workload struct {
 	ReadRatio       float64       `yaml:"readRatio"`
 	KeyspaceSize    uint64        `yaml:"keyspaceSize"`
@@ -37,15 +41,23 @@ func (w *Workload) WithDefault() {
 	}
 }
 
-func Load(path string) (*Workload, error) {
+type Workloads struct {
+	Metadata       Metadata   `yaml:"metadata"`
+	ExitWhenFinish bool       `yaml:"exitWhenFinish"`
+	Items          []Workload `yaml:"items"`
+}
+
+func Load(path string) (*Workloads, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var w Workload
+	var w Workloads
 	if err := yaml.Unmarshal(data, &w); err != nil {
 		return nil, err
 	}
-	w.WithDefault()
+	for _, item := range w.Items {
+		item.WithDefault()
+	}
 	return &w, nil
 }

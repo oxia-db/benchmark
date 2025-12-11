@@ -4,32 +4,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .name }}
+  name: {{ $.Release.Name }}-{{ .name }}
 spec:
   replicas: {{ .parallelism | default 1 }}
   selector:
     matchLabels:
-      app: {{ .name }}
+      app: {{ $.Release.Name }}-{{ .name }}
   template:
     metadata:
       annotations:
         prometheus.io/port: "8080"
         prometheus.io/scrape: "true"
       labels:
-        app: {{ .name }}
+        app: {{ $.Release.Name }}-{{ .name }}
     spec:
-      serviceAccountName: worker-sa
+      serviceAccountName: {{ $.Release.Name }}-worker-sa
       initContainers:
-        - name: wait-{{.name}}
+        - name: wait-{{ .name }}
           image: bitnami/kubectl:latest
           command:
             - sh
             - -c
             - |
-              if [ "{{.driverConfig.driver}}" = "oxia" ]; then
-                STS_NAME="benchmark"
+              if [ "{{ .driverConfig.driver }}" = "oxia" ]; then
+                STS_NAME="{{ $.Release.Name}}"
               else
-                STS_NAME="benchmark-{{.driverConfig.driver}}"
+                STS_NAME="{{ $.Release.Name}}-{{ .driverConfig.driver }}"
               fi
 
               echo "Waiting for Target Cluster $STS_NAME to be ready..."
@@ -38,7 +38,7 @@ spec:
                 --timeout=300s
               echo "StatefulSet $STS_NAME is ready!"
       containers:
-        - name: {{ .name }}
+        - name: {{ $.Release.Name }}-{{ .name }}
           image: "oxia/benchmark:main"
           imagePullPolicy: Always
           ports:
@@ -66,9 +66,8 @@ spec:
       volumes:
         - name: driver-config
           configMap:
-            name: {{ .name }}-driver-config
+            name: {{ $.Release.Name }}-{{ .name }}-driver-config
         - name: workload-config
           configMap:
-            name: workload-config
-
+            name: {{ $.Release.Name }}-workload-config
 {{- end }}

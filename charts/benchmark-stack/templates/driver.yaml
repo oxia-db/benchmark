@@ -4,7 +4,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .name }}-driver-config
+  name: {{ $.Release.Name }}-{{ .name }}-driver-config
 data:
   driver-config.yaml: |
 {{ toYaml .driverConfig | indent 4 }}

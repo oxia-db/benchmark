@@ -1,0 +1,142 @@
+
+global:
+  security:
+    allowInsecureImages: true
+# Oxia cluster configuration
+
+oxia-cluster:
+  enabled: true
+  replicationFactor: 3
+  initialShardCount: 3
+  coordinator:
+    cpu: "2"
+    memory: 4Gi
+  server:
+    replicas: 3
+    cpu: "2"
+    memory: 8Gi
+    storage: 128Gi
+  image:
+    repository: oxia/oxia
+    tag: 0.15.1
+    pullPolicy: IfNotPresent
+  pprofEnabled: true
+  monitoringEnabled: true
+
+
+
+# Zookeeper cluster configuration
+zookeeper:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 128Gi
+  image:
+    repository: bitnamilegacy/zookeeper
+  resources:
+    requests:
+      cpu: "2"
+      memory: 8Gi
+    limits:
+      cpu: "2"
+      memory: 8Gi
+
+# ETCD cluster configuration
+etcd:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 128Gi
+  auth:
+    rbac:
+      create: false
+      allowNoneAuthentication: true
+    token:
+      enabled: false
+  image:
+    repository: bitnamilegacy/etcd
+  resources:
+    requests:
+      cpu: "2"
+      memory: 8Gi
+    limits:
+      cpu: "2"
+      memory: 8Gi
+  preUpgradeJob:
+    enabled: false
+  extraEnvVars:
+    - name: ETCD_QUOTA_BACKEND_BYTES
+      value: "34359738368"  #32Gi = 32 * 1024 * 1024 * 1024
+
+workloads:
+  exitWhenFinish: false
+  metadata:
+    serverNum: 3
+  items:
+    # insert-only
+    - readRatio: 0.0
+      keyspaceSize: 10000000    # 10M keys
+      keyDistribution: order
+      valueSize: 64
+      targetRate: 40000
+      duration: 15m
+      parallelism: 1000
+    # YCSB X (100 % updates, zipf distribution)
+    - readRatio: 0.0
+      keyspaceSize: 10000000
+      keyDistribution: zipf
+      valueSize: 64
+      targetRate: 40000
+      duration: 15m
+      parallelism: 1000
+    # YCSB A (50% updates, 50% read, zipf distribution)
+    - readRatio: 0.5
+      keyspaceSize: 10000000
+      keyDistribution: zipf
+      valueSize: 64
+      targetRate: 40000
+      duration: 15m
+      parallelism: 1000
+    # YCSB C (100% read, zipf distribution)
+    - readRatio: 1
+      keyspaceSize: 10000000
+      keyDistribution: zipf
+      valueSize: 64
+      targetRate: 40000
+      duration: 15m
+      parallelism: 1000
+
+
+# workers
+workers:
+  - name: oxia-worker
+    parallelism: 5
+    cpu: "2"
+    memory: 4Gi
+    driverConfig:
+      driver: oxia
+      config:
+        serviceAddress: "benchmark-3:6648"
+        batchLinger: 10ms
+        batchMaxCount: 1000
+  - name: zookeeper-worker
+    parallelism: 5
+    cpu: "2"
+    memory: 4Gi
+    driverConfig:
+      driver: zookeeper
+      config:
+        servers:
+          - "benchmark-3-zookeeper:2181"
+  - name: etcd-worker
+    parallelism: 5
+    cpu: "2"
+    memory: 4Gi
+    driverConfig:
+      driver: etcd
+      config:
+        endpoints:
+          - "benchmark-3-etcd:2379"
+        dialTimeout: 5s

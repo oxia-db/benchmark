@@ -20,17 +20,19 @@ import (
 	"os"
 	drivers2 "oxia-benchmark/drivers"
 	runner2 "oxia-benchmark/runner"
+	"sync"
 
 	"github.com/oxia-db/oxia/common/constant"
 	"github.com/oxia-db/oxia/common/logging"
 	"github.com/oxia-db/oxia/common/metric"
+	"github.com/oxia-db/oxia/common/process"
 	"github.com/spf13/cobra"
 )
 
 var (
-	driverCfgPath   string
-	workloadCfgPath string
-	metricsAddr     string
+	driverCfgPath    string
+	workloadsCfgPath string
+	metricsAddr      string
 
 	cmd = &cobra.Command{
 		Use:   "oxia-benchmark",
@@ -41,9 +43,9 @@ var (
 
 func init() {
 	cmd.Flags().StringVar(&driverCfgPath, "driver-config", "", "Path to driver config YAML")
-	cmd.Flags().StringVar(&workloadCfgPath, "workload", "", "Path to workload YAML")
+	cmd.Flags().StringVar(&workloadsCfgPath, "workloads", "", "Path to workload YAML")
 	_ = cmd.MarkFlagRequired("driver-config")
-	_ = cmd.MarkFlagRequired("workload")
+	_ = cmd.MarkFlagRequired("workloads")
 
 	cmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "m", fmt.Sprintf("0.0.0.0:%d", constant.DefaultMetricsPort), "Metrics service bind address")
 }
@@ -51,6 +53,11 @@ func init() {
 func runBenchmark(*cobra.Command, []string) error {
 	logging.ConfigureLogger()
 	log := slog.With()
+
+	process.PprofBindAddress = "127.0.0.1:6060"
+	process.PprofEnable = true
+	profiling := process.RunProfiling()
+	defer profiling.Close()
 
 	metrics, err := metric.Start(metricsAddr)
 	if err != nil {
@@ -63,18 +70,35 @@ func runBenchmark(*cobra.Command, []string) error {
 		return err
 	}
 	log.Info("Load driver configuration", slog.Any("driverConfig", driverConf))
-	wl, err := runner2.Load(workloadCfgPath)
+	wls, err := runner2.Load(workloadsCfgPath)
 	if err != nil {
 		return err
 	}
-	log.Info("Load workload configuration", slog.Any("workloadConfig", wl))
+	log.Info("Load workloads configuration", slog.Any("workloadConfig", wls))
 	drv, err := drivers2.Build(driverConf)
 	if err != nil {
 		return err
 	}
 
 	defer drv.Close()
-	return runner2.Run(wl, drv)
+
+	metadata := wls.Metadata
+	for idx := range wls.Items {
+		workload := wls.Items[idx]
+		log.Info("Starting workload ", slog.Any("workload", workload))
+		if err := runner2.Run(metadata, &workload, drv); err != nil {
+			log.Error("Workflow pipeline interrupted by error. ", slog.Any("workload", workload), slog.Any("err", err))
+			return err
+		}
+		log.Info("Finish workload, try next one.", slog.Any("workload", workload))
+	}
+	log.Info("All workload finished. ")
+	if !wls.ExitWhenFinish {
+		waiter := sync.WaitGroup{}
+		waiter.Add(1)
+		waiter.Wait()
+	}
+	return nil
 }
 
 func main() {

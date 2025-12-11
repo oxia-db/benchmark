@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/bmizerany/perks/quantile"
+	"github.com/oxia-db/oxia/common/channel"
 	"github.com/oxia-db/oxia/common/metric"
 	"golang.org/x/time/rate"
 )
@@ -46,6 +47,7 @@ type runner struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+	wg     sync.WaitGroup
 
 	opReadFailedLatency   metric.LatencyHistogram
 	opReadSuccessLatency  metric.LatencyHistogram
@@ -64,12 +66,13 @@ type stats struct {
 	readLatency  *quantile.Stream
 }
 
-func Run(wl *Workload, driver drivers.KVStoreDriver) error {
+func Run(metadata Metadata, wl *Workload, driver drivers.KVStoreDriver) error {
 	slog.Info("Running workload", slog.Any("workload", *wl))
 
 	sequenceGenerator := sequence.NewGenerator(wl.KeyDistribution, wl.KeyspaceSize)
 
 	r := &runner{
+		wg:                sync.WaitGroup{},
 		workload:          wl,
 		sequenceGenerator: sequenceGenerator,
 		driver:            driver,
@@ -92,6 +95,7 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
 				"readRatio":    wl.ReadRatio,
+				"serverNum":    metadata.ServerNum,
 			}),
 		opReadSuccessLatency: metric.NewLatencyHistogram("kv.op.latency", "Read operation latency",
 			map[string]any{
@@ -101,6 +105,7 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
 				"readRatio":    wl.ReadRatio,
+				"serverNum":    metadata.ServerNum,
 			}),
 		opWriteSuccessLatency: metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
 			map[string]any{
@@ -110,6 +115,7 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
 				"readRatio":    wl.ReadRatio,
+				"serverNum":    metadata.ServerNum,
 			}),
 		opWriteFailedLatency: metric.NewLatencyHistogram("kv.op.latency", "Write operation latency",
 			map[string]any{
@@ -119,6 +125,7 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
 				"readRatio":    wl.ReadRatio,
+				"serverNum":    metadata.ServerNum,
 			}),
 		outstandingRequestGauge: metric.NewUpDownCounter("kv.op.outstanding", "Count of outstanding operations", "count",
 			map[string]any{
@@ -126,6 +133,7 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 				"valueSize":    wl.ValueSize,
 				"distribution": wl.KeyDistribution,
 				"readRatio":    wl.ReadRatio,
+				"serverNum":    metadata.ServerNum,
 			},
 		),
 	}
@@ -137,10 +145,8 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 	stasTicker := time.Tick(statsTickerPeriod)
 	endTimer := time.NewTimer(wl.Duration)
 
-	wg := &sync.WaitGroup{}
-
 	for i := 0; i < wl.Parallelism; i++ {
-		wg.Go(func() {
+		r.wg.Go(func() {
 			r.generateTraffic()
 		})
 	}
@@ -167,8 +173,7 @@ func Run(wl *Workload, driver drivers.KVStoreDriver) error {
 		case <-endTimer.C:
 			// Stop all workers and wait for them
 			r.cancel()
-			time.Sleep(1 * time.Second)
-			wg.Wait()
+			r.wg.Wait()
 
 			slog.Info("-------------------------------------------------------")
 			slog.Info("Cumulative write/read latencies")
@@ -197,21 +202,24 @@ func (r *runner) generateTraffic() {
 	perWorkerRate := r.workload.TargetRate / float64(r.workload.Parallelism)
 	limiter := rate.NewLimiter(rate.Limit(perWorkerRate), int(perWorkerRate))
 	reqCh := make(chan *kvReq, 1000)
-	defer close(reqCh)
-	go r.consumeTraffic(reqCh)
+	r.wg.Go(func() {
+		r.consumeTraffic(reqCh)
+	})
 	for {
 		if err := limiter.Wait(r.ctx); err != nil {
 			return
 		}
 		key := fmt.Sprintf("k-%016d", r.sequenceGenerator.Next())
 		r.outstandingRequestGauge.Inc()
-		reqCh <- &kvReq{key, value}
+		channel.PushNoBlock(reqCh, &kvReq{key, value})
 	}
 }
 
 func (r *runner) consumeTraffic(reqCh <-chan *kvReq) {
 	resCh := make(chan *kvRes)
-	go r.handleResult(resCh)
+	r.wg.Go(func() {
+		r.handleResult(resCh)
+	})
 	for {
 		select {
 		case req := <-reqCh:
@@ -234,15 +242,14 @@ func (r *runner) consumeTraffic(reqCh <-chan *kvReq) {
 				successTimer = r.opWriteSuccessLatency.Timer()
 				failedTimer = r.opWriteFailedLatency.Timer()
 			}
-			resCh <- &kvRes{
+			channel.PushNoBlock(resCh, &kvRes{
 				kvResCh:        ch,
 				latencyCh:      latencyCh,
 				start:          start,
 				successLatency: &successTimer,
 				failedLatency:  &failedTimer,
-			}
+			})
 		case <-r.ctx.Done():
-			close(resCh)
 			return
 		}
 	}
