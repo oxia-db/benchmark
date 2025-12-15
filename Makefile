@@ -33,7 +33,7 @@ build:
 	pushd drivers/zookeeper; go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-zookeeper.so . ; popd
 
 run:
-	$(BUILD_DIR)/$(APP_NAME) run --driver-config configs/driver_etcd.yaml --workload configs/workload_mixed.yaml
+	$(BUILD_DIR)/$(APP_NAME) --driver-config conf/driver-etcd.yaml --workloads conf/workload-mixed.yaml
 
 docker:
 	docker build -t $(APP_NAME):latest .
