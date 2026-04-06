@@ -1,14 +1,17 @@
 # Oxia Benchmark
 
-Oxia Benchmark is a versatile and extensible framework for benchmarking distributed key-value stores. It is designed to facilitate performance comparisons between systems like [Oxia](https://github.com/oxia-db/oxia), [etcd](https://etcd.io/), and [Apache Zookeeper](https://zookeeper.apache.org/).
+Oxia Benchmark is a versatile and extensible framework for benchmarking distributed key-value stores. It is designed to facilitate performance comparisons between systems like [Oxia](https://github.com/oxia-db/oxia), [etcd](https://etcd.io/), and [Apache ZooKeeper](https://zookeeper.apache.org/).
 
 ## Features
 
-- **Service-Agnostic:** Easily compare the performance of different key-value stores.
-- **Extensible:** A plugin-based architecture for drivers makes it simple to add support for new systems.
-- **Configurable Workloads:** Define a variety of benchmark scenarios with customizable parameters to simulate different access patterns.
-- **Kubernetes-Native:** Deploy and manage the entire benchmark environment on Kubernetes using the provided Helm charts.
-- **Prometheus Exporter:** Monitor benchmark performance in real-time with the built-in Prometheus metrics exporter.
+- **Service-Agnostic:** Compare the performance of different key-value stores using the same workloads and methodology, ensuring fair apples-to-apples comparisons.
+- **Coordinated Omission Correction:** Latency measurements use intended send times rather than actual dispatch times, avoiding the [coordinated omission](https://www.scylladb.com/2021/04/22/on-coordinated-omission/) problem that plagues most benchmarking tools. When the system under test slows down, the queuing delay is correctly reflected in percentile latencies.
+- **Distributed Load Generation:** Scale beyond single-node bottlenecks by deploying multiple worker pods on Kubernetes, each generating load against the same cluster. Each worker independently tracks its own target rate and latency measurements.
+- **YCSB-Style Workloads:** Run industry-standard [YCSB](https://github.com/brianfrankcooper/YCSB) workload scenarios (A, C, D, X) with configurable read/write ratios, key distributions (uniform, zipf, sequential), and key space sizes.
+- **Extensible Plugin Architecture:** Add support for new key-value stores by implementing a Go plugin driver, without modifying the core benchmark code.
+- **Kubernetes-Native Deployment:** Deploy the complete benchmark environment — including the systems under test — using Helm charts with pre-configured cluster topologies (3, 6, 12 servers).
+- **Prometheus Metrics:** Monitor benchmark performance in real-time via the built-in Prometheus exporter, with per-operation latency histograms labeled by driver, operation type, and success/failure.
+- **Rate-Limited Traffic Generation:** Per-worker token bucket rate limiting ensures precise control over target throughput, independent of system response times.
 
 ## Getting Started
 
@@ -39,6 +42,14 @@ To run linting across all modules:
 make lint
 ```
 
+### Test
+
+To run all unit tests:
+
+```bash
+make test
+```
+
 ### Run
 
 To execute a benchmark, you need to provide a driver configuration file and a workload configuration file.
@@ -64,7 +75,16 @@ make clean
 
 ## Kubernetes Deployment
 
-The `charts` directory contains a Helm chart for deploying the benchmark to a Kubernetes cluster. The `benchmark-stack` chart can deploy the entire benchmark environment, including the system under test (Oxia, etcd, or Zookeeper).
+The `charts` directory contains a Helm chart for deploying the benchmark to a Kubernetes cluster. The `benchmark-stack` chart deploys the entire benchmark environment: the systems under test (Oxia, etcd, ZooKeeper) and the benchmark workers that generate load against them.
+
+### Architecture
+
+In a Kubernetes deployment, the benchmark runs as a distributed system:
+
+- **Workers** are deployed as Kubernetes Deployments with configurable replica counts. Each worker pod runs an independent instance of the benchmark, generating traffic at the configured target rate. For example, 6 worker replicas each targeting 40,000 ops/s produce an aggregate load of 240,000 ops/s against the cluster.
+- **Workloads** are shared across all workers via a ConfigMap, ensuring consistent test scenarios.
+- **Driver configs** are per-worker, allowing simultaneous benchmarking of different systems (e.g., Oxia, etcd, ZooKeeper) in the same deployment.
+- Each worker exposes Prometheus metrics independently, which can be aggregated for a cluster-wide view.
 
 ### Chart Configuration
 
@@ -90,7 +110,7 @@ helm install benchmark charts/benchmark-stack \
   --set etcd.enabled=false
 ```
 
-This command will deploy a 3-node Oxia cluster and the benchmark workers configured to connect to it. The Zookeeper and etcd deployments will be disabled.
+This command will deploy a 3-node Oxia cluster and the benchmark workers configured to connect to it. The ZooKeeper and etcd deployments will be disabled.
 
 You can then see the benchmark driver logs by running:
 
@@ -116,11 +136,13 @@ Key workload parameters:
 
 - `readRatio`: The proportion of read operations (0.0 for write-only, 1.0 for read-only).
 - `keyspaceSize`: The number of keys to use in the benchmark.
-- `keyDistribution`: The distribution of keys (e.g., `order`, `zipf`, `uniform`).
+- `keyDistribution`: The distribution of keys (`order` for sequential, `zipf` for hotspot, `uniform` for random).
 - `valueSize`: The size of the values in bytes.
-- `targetRate`: The desired rate of operations per second.
-- `duration`: The duration of the workload.
-- `parallelism`: The number of concurrent clients.
+- `targetRate`: The desired rate of operations per second per worker.
+- `duration`: The duration of the workload (e.g., `10s`, `15m`).
+- `parallelism`: The number of concurrent clients within each worker.
+
+Multiple workloads can be defined in a single file and will be executed sequentially.
 
 ## Monitoring
 
@@ -130,9 +152,10 @@ The benchmark tool exposes Prometheus metrics on port `8080` by default at `/met
 
 To add support for a new key-value store, you can create a new driver.
 
-1.  Create a new directory in the `drivers/` directory.
+1.  Create a new directory in the `drivers/` directory with its own `go.mod`.
 2.  Implement the `drivers.KVStoreDriver` interface in your new driver.
 3.  Add a build target to the `Makefile` to build your driver as a Go plugin.
+4.  Add the new module to `go.work` and run `go work sync` to keep dependencies aligned.
 
 ## Contributing
 
