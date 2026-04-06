@@ -17,6 +17,8 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	drivers2 "oxia-benchmark/drivers"
@@ -25,11 +27,11 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/oxia-db/oxia/common/constant"
-	"github.com/oxia-db/oxia/common/logging"
-	"github.com/oxia-db/oxia/common/metric"
 	"github.com/oxia-db/oxia/common/process"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 var (
@@ -50,11 +52,44 @@ func init() {
 	_ = cmd.MarkFlagRequired("driver-config")
 	_ = cmd.MarkFlagRequired("workloads")
 
-	cmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "m", fmt.Sprintf("0.0.0.0:%d", constant.DefaultMetricsPort), "Metrics service bind address")
+	cmd.Flags().StringVarP(&metricsAddr, "metrics-addr", "m", "0.0.0.0:8080", "Metrics service bind address")
+}
+
+func startMetrics(bindAddress string) (*http.Server, error) {
+	exporter, err := prometheus.New()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create prometheus exporter: %w", err)
+	}
+
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(exporter))
+	_ = provider
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	listener, err := net.Listen("tcp", bindAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on %s: %w", bindAddress, err)
+	}
+
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: time.Second,
+	}
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	slog.Info(fmt.Sprintf("Serving Prometheus metrics at http://localhost:%d/metrics", port))
+
+	go func() {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			slog.Error("Failed to serve metrics", slog.Any("error", err))
+		}
+	}()
+
+	return server, nil
 }
 
 func runBenchmark(*cobra.Command, []string) error {
-	logging.ConfigureLogger()
 	log := slog.With()
 
 	process.PprofBindAddress = "127.0.0.1:6060"
@@ -62,11 +97,11 @@ func runBenchmark(*cobra.Command, []string) error {
 	profiling := process.RunProfiling()
 	defer profiling.Close()
 
-	metrics, err := metric.Start(metricsAddr)
+	metricsServer, err := startMetrics(metricsAddr)
 	if err != nil {
 		return err
 	}
-	defer metrics.Close()
+	defer metricsServer.Close()
 
 	driverConf, err := drivers2.LoadConfig(driverCfgPath)
 	if err != nil {
