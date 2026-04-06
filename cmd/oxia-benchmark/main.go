@@ -18,9 +18,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	drivers2 "oxia-benchmark/drivers"
 	runner2 "oxia-benchmark/runner"
-	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -95,11 +96,13 @@ func runBenchmark(*cobra.Command, []string) error {
 		})
 		log.Info("Finish workload, try next one.", slog.Any("workload", workload))
 	}
-	log.Info("All workload finished. ")
+	log.Info("All workloads finished.")
 	if !wls.ExitWhenFinish {
-		waiter := sync.WaitGroup{}
-		waiter.Add(1)
-		waiter.Wait()
+		log.Info("Waiting for signal to exit (SIGINT/SIGTERM)...")
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigCh
+		log.Info("Received signal, shutting down.", slog.String("signal", sig.String()))
 	}
 	return nil
 }
