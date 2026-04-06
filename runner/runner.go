@@ -76,8 +76,8 @@ func Run(metadata Metadata, wl *Workload, driver drivers.KVStoreDriver) error {
 		sequenceGenerator: sequenceGenerator,
 		driver:            driver,
 		limiter:           rate.NewLimiter(rate.Limit(wl.TargetRate), int(wl.TargetRate)),
-		writeLatencyCh:    make(chan int64, 1000),
-		readLatencyCh:     make(chan int64, 1000),
+		writeLatencyCh:    make(chan int64, 10000),
+		readLatencyCh:     make(chan int64, 10000),
 		periodStats: stats{
 			writeLatency: quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
 			readLatency:  quantile.NewTargeted(0.50, 0.95, 0.99, 0.999, 1.0),
@@ -274,7 +274,11 @@ func (r *runner) handleResult(resCh <-chan *kvRes) {
 				r.totalStats.failedOps.Add(1)
 				result.failedLatency.Done()
 			} else {
-				result.latencyCh <- time.Since(res.End).Microseconds()
+				select {
+				case result.latencyCh <- time.Since(result.start).Microseconds():
+				default:
+					// Drop latency sample if channel is full to avoid blocking
+				}
 				result.successLatency.Done()
 			}
 			r.outstandingRequestGauge.Dec()
