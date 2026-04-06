@@ -36,10 +36,8 @@ type runner struct {
 	sequenceGenerator sequence.Generator
 	limiter           *rate.Limiter
 
-	writeLatencyCh  chan int64
-	readLatencyCh   chan int64
-	periodFailedOps atomic.Int64
-	totalFailedOps  atomic.Int64
+	writeLatencyCh chan int64
+	readLatencyCh  chan int64
 
 	periodStats stats
 	totalStats  stats
@@ -176,7 +174,7 @@ func Run(metadata Metadata, wl *Workload, driver drivers.KVStoreDriver) error {
 
 			slog.Info("-------------------------------------------------------")
 			slog.Info("Cumulative write/read latencies")
-			printStats(&r.totalStats, time.Now().Sub(testStart))
+			printStats(&r.totalStats, time.Since(testStart))
 
 			return nil
 		}

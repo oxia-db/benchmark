@@ -95,13 +95,13 @@ func runBenchmark(*cobra.Command, []string) error {
 	process.PprofBindAddress = "127.0.0.1:6060"
 	process.PprofEnable = true
 	profiling := process.RunProfiling()
-	defer profiling.Close()
+	defer func() { _ = profiling.Close() }()
 
 	metricsServer, err := startMetrics(metricsAddr)
 	if err != nil {
 		return err
 	}
-	defer metricsServer.Close()
+	defer func() { _ = metricsServer.Close() }()
 
 	driverConf, err := drivers2.LoadConfig(driverCfgPath)
 	if err != nil {
@@ -118,7 +118,7 @@ func runBenchmark(*cobra.Command, []string) error {
 		return err
 	}
 
-	defer drv.Close()
+	defer func() { _ = drv.Close() }()
 
 	metadata := wls.Metadata
 	for idx := range wls.Items {
