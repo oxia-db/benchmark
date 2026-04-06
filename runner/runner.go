@@ -268,18 +268,22 @@ func (r *runner) handleResult(resCh <-chan *kvRes) {
 	for {
 		select {
 		case result := <-resCh:
-			if res := <-result.kvResCh; res.Err != nil {
-				slog.Error("Error", "error", res.Err)
-				r.periodStats.failedOps.Add(1)
-				r.totalStats.failedOps.Add(1)
-				result.failedLatency.Done()
-			} else {
-				select {
-				case result.latencyCh <- time.Since(result.start).Microseconds():
-				default:
-					// Drop latency sample if channel is full to avoid blocking
+			select {
+			case res := <-result.kvResCh:
+				if res.Err != nil {
+					slog.Error("Error", "error", res.Err)
+					r.periodStats.failedOps.Add(1)
+					r.totalStats.failedOps.Add(1)
+					result.failedLatency.Done()
+				} else {
+					select {
+					case result.latencyCh <- time.Since(result.start).Microseconds():
+					default:
+					}
+					result.successLatency.Done()
 				}
-				result.successLatency.Done()
+			case <-r.ctx.Done():
+				return
 			}
 			r.outstandingRequestGauge.Dec()
 		case <-r.ctx.Done():
