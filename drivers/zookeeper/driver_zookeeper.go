@@ -71,7 +71,6 @@ func (z *ZooKeeperDriver) Init(cfg map[string]any) error {
 func (z *ZooKeeperDriver) Put(key string, value []byte) <-chan *drivers.KVResult {
 	ch := make(chan *drivers.KVResult, 1)
 	go func() {
-		// interpret “key” as ZK path
 		path := fmt.Sprintf("/test/%s", key)
 
 		_, err := z.zkc.Set(path, value, -1)
@@ -80,13 +79,21 @@ func (z *ZooKeeperDriver) Put(key string, value []byte) <-chan *drivers.KVResult
 			return
 		}
 
-		// Try to create if it doesn't exist
+		// Node doesn't exist, try to create it
 		_, err = z.zkc.Create(path, value, 0, zk.WorldACL(zk.PermAll))
+		if err == nil {
+			ch <- &drivers.KVResult{Err: nil, End: time.Now()}
+			return
+		}
+
 		if !errors.Is(err, zk.ErrNodeExists) {
 			ch <- &drivers.KVResult{Err: err, End: time.Now()}
 			return
 		}
-		ch <- &drivers.KVResult{Err: nil, End: time.Now()}
+
+		// Another goroutine created it between our Set and Create; retry Set
+		_, err = z.zkc.Set(path, value, -1)
+		ch <- &drivers.KVResult{Err: err, End: time.Now()}
 	}()
 	return ch
 }
