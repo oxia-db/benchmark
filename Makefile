@@ -15,22 +15,28 @@
 APP_NAME=oxia-benchmark
 BUILD_DIR=build
 
-.PHONY: all build run docker clean
+.PHONY: all build run docker clean tidy lint
 
 all: tidy build
 
 tidy:
-	pushd drivers; go mod tidy; popd
-	pushd drivers/oxia; go mod tidy; popd
-	pushd drivers/etcd; go mod tidy; popd
-	pushd drivers/zookeeper; go mod tidy; popd
+	cd drivers && go mod tidy
+	cd drivers/oxia && go mod tidy
+	cd drivers/etcd && go mod tidy
+	cd drivers/zookeeper && go mod tidy
 	go mod tidy
 
 build:
 	go build -o $(BUILD_DIR)/$(APP_NAME) ./cmd/oxia-benchmark
-	pushd drivers/oxia; go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-oxia.so . ; popd
-	pushd drivers/etcd; go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-etcd.so . ; popd
-	pushd drivers/zookeeper; go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-zookeeper.so . ; popd
+	cd drivers/oxia && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-oxia.so .
+	cd drivers/etcd && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-etcd.so .
+	cd drivers/zookeeper && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-zookeeper.so .
+
+lint:
+	golangci-lint run ./...
+	cd drivers/oxia && golangci-lint run ./...
+	cd drivers/etcd && golangci-lint run ./...
+	cd drivers/zookeeper && golangci-lint run ./...
 
 run:
 	$(BUILD_DIR)/$(APP_NAME) --driver-config conf/driver-etcd.yaml --workloads conf/workload-mixed.yaml
