@@ -15,7 +15,7 @@
 APP_NAME=oxia-benchmark
 BUILD_DIR=build
 
-.PHONY: all build run docker clean tidy lint
+.PHONY: all build run docker clean tidy lint test
 
 all: tidy build
 
@@ -31,6 +31,10 @@ build:
 	cd drivers/oxia && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-oxia.so .
 	cd drivers/etcd && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-etcd.so .
 	cd drivers/zookeeper && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-zookeeper.so .
+
+test:
+	go test ./...
+	cd drivers && go test ./...
 
 lint:
 	golangci-lint run ./...
