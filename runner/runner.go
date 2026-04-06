@@ -182,8 +182,9 @@ func Run(metadata Metadata, wl *Workload, driver drivers.KVStoreDriver) error {
 }
 
 type kvReq struct {
-	key   string
-	value []byte
+	key           string
+	value         []byte
+	intendedStart time.Time
 }
 
 type kvRes struct {
@@ -197,11 +198,18 @@ type kvRes struct {
 func (r *runner) generateTraffic() {
 	value := make([]byte, r.workload.ValueSize)
 	perWorkerRate := r.workload.TargetRate / float64(r.workload.Parallelism)
+	interval := time.Duration(float64(time.Second) / perWorkerRate)
 	limiter := rate.NewLimiter(rate.Limit(perWorkerRate), int(perWorkerRate))
 	reqCh := make(chan *kvReq, 1000)
 	r.wg.Go(func() {
 		r.consumeTraffic(reqCh)
 	})
+
+	// Track the intended send time to account for coordinated omission.
+	// If the system falls behind, intendedStart advances ahead of wall clock,
+	// so latency measurements include the queuing delay.
+	intendedStart := time.Now()
+
 	for {
 		if err := limiter.Wait(r.ctx); err != nil {
 			return
@@ -210,11 +218,17 @@ func (r *runner) generateTraffic() {
 		r.outstandingRequestGauge.Inc()
 
 		select {
-		case reqCh <- &kvReq{key, value}:
+		case reqCh <- &kvReq{key, value, intendedStart}:
 		case <-r.ctx.Done():
 			return
 		}
 
+		intendedStart = intendedStart.Add(interval)
+		// If we're ahead of schedule (system is fast), snap to now
+		// to avoid accumulating negative offsets
+		if now := time.Now(); intendedStart.After(now) {
+			intendedStart = now
+		}
 	}
 }
 
@@ -230,7 +244,7 @@ func (r *runner) consumeTraffic(reqCh <-chan *kvReq) {
 			value := req.value
 			var ch <-chan *drivers.KVResult
 			var latencyCh chan int64
-			start := time.Now()
+			start := req.intendedStart
 
 			var successTimer metric.Timer
 			var failedTimer metric.Timer
