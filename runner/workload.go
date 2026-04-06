@@ -15,6 +15,7 @@
 package runner
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -41,6 +42,33 @@ func (w *Workload) WithDefault() {
 	}
 }
 
+func (w *Workload) Validate() error {
+	if w.KeyspaceSize == 0 {
+		return fmt.Errorf("keyspaceSize must be greater than 0")
+	}
+	if w.ValueSize <= 0 {
+		return fmt.Errorf("valueSize must be greater than 0")
+	}
+	if w.TargetRate <= 0 {
+		return fmt.Errorf("targetRate must be greater than 0")
+	}
+	if w.Duration <= 0 {
+		return fmt.Errorf("duration must be greater than 0")
+	}
+	if w.Parallelism <= 0 {
+		return fmt.Errorf("parallelism must be greater than 0")
+	}
+	if w.ReadRatio < 0 || w.ReadRatio > 1 {
+		return fmt.Errorf("readRatio must be between 0 and 1")
+	}
+	switch w.KeyDistribution {
+	case "uniform", "zipf", "order":
+	default:
+		return fmt.Errorf("unsupported keyDistribution: %s", w.KeyDistribution)
+	}
+	return nil
+}
+
 type Workloads struct {
 	Metadata       Metadata   `yaml:"metadata"`
 	ExitWhenFinish bool       `yaml:"exitWhenFinish"`
@@ -56,8 +84,11 @@ func Load(path string) (*Workloads, error) {
 	if err := yaml.Unmarshal(data, &w); err != nil {
 		return nil, err
 	}
-	for _, item := range w.Items {
-		item.WithDefault()
+	for i := range w.Items {
+		w.Items[i].WithDefault()
+		if err := w.Items[i].Validate(); err != nil {
+			return nil, fmt.Errorf("workload %d: %w", i, err)
+		}
 	}
 	return &w, nil
 }
