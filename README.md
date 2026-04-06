@@ -14,9 +14,10 @@ Oxia Benchmark is a versatile and extensible framework for benchmarking distribu
 
 ### Prerequisites
 
-- Go 1.20+
+- Go 1.26+
 - Docker (for building the container image)
 - `make`
+- `golangci-lint` (optional, for linting)
 
 ## Local Usage
 
@@ -30,12 +31,29 @@ make build
 
 This will create the `oxia-benchmark` binary and the driver plugins in the `build/` directory.
 
+### Lint
+
+To run linting across all modules:
+
+```bash
+make lint
+```
+
 ### Run
 
 To execute a benchmark, you need to provide a driver configuration file and a workload configuration file.
 
 ```bash
 ./build/oxia-benchmark --driver-config conf/driver-oxia.yaml --workloads conf/workload-mixed.yaml
+```
+
+Example output:
+
+```
+2025/06/15 10:00:00 INFO Running workload workload="{ReadRatio:0 KeyspaceSize:100000 KeyDistribution:order ValueSize:64 TargetRate:40000 Duration:10s Parallelism:1}"
+2025/06/15 10:00:10 INFO Stats - Total ops: 39850.2 ops/s - Failed ops:    0.0 ops/s
+                Write ops 39850.2 w/s  Latency ms: 50%   0.3 - 95%   0.8 - 99%   1.2 - 99.9%   2.5 - max    5.1
+                Read  ops    0.0 r/s  Latency ms: 50%   0.0 - 95%   0.0 - 99%   0.0 - 99.9%   0.0 - max    0.0
 ```
 
 To clean up the build artifacts, run:
@@ -106,14 +124,14 @@ Key workload parameters:
 
 ## Monitoring
 
-The benchmark tool exposes Prometheus metrics on port `9090` by default. You can scrape these metrics to monitor the performance of the benchmark in real-time. The metrics address can be changed with the `--metrics-addr` flag.
+The benchmark tool exposes Prometheus metrics on port `8080` by default at `/metrics`. You can scrape these metrics to monitor the performance of the benchmark in real-time. The metrics address can be changed with the `--metrics-addr` flag.
 
 ## Extending the Benchmark
 
 To add support for a new key-value store, you can create a new driver.
 
 1.  Create a new directory in the `drivers/` directory.
-2.  Implement the `drivers.Driver` interface in your new driver.
+2.  Implement the `drivers.KVStoreDriver` interface in your new driver.
 3.  Add a build target to the `Makefile` to build your driver as a Go plugin.
 
 ## Contributing
