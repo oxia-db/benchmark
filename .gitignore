@@ -41,6 +41,7 @@ go.work.sum
 .env
 
 build
+oxia-benchmark
 .idea
 
 *.tgz
