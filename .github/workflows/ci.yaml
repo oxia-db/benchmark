@@ -23,19 +23,10 @@ jobs:
           go-version: '1.26'
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
-      - name: Lint driver modules
-        run: |
-          for dir in drivers/oxia drivers/etcd drivers/zookeeper; do
-            echo "Linting $dir..."
-            cd $dir
-            golangci-lint run ./...
-            cd $GITHUB_WORKSPACE
-          done
+      - name: Lint
+        run: make lint
 
       - name: Test
         run: make test
