@@ -24,8 +24,8 @@ import io.oxia.benchmark.runner.Workloads;
 import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -36,7 +36,7 @@ import picocli.CommandLine.Option;
         description = "Distributed KV load generator")
 public class BenchmarkMain implements Callable<Integer> {
 
-    private static final Logger log = LoggerFactory.getLogger(BenchmarkMain.class);
+    private static final Logger log = LogManager.getLogger(BenchmarkMain.class);
 
     @Option(names = "--driver-config", required = true, description = "Path to driver config YAML")
     private Path driverConfigPath;

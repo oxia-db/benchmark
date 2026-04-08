@@ -22,17 +22,17 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class ZooKeeperDriver implements KVStoreDriver {
 
-    private static final Logger log = LoggerFactory.getLogger(ZooKeeperDriver.class);
+    private static final Logger log = LogManager.getLogger(ZooKeeperDriver.class);
 
     private ZooKeeper zk;
 

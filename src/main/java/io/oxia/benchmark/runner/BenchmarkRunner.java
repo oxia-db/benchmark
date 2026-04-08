@@ -27,12 +27,12 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
 import org.HdrHistogram.ConcurrentDoubleHistogram;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class BenchmarkRunner {
 
-    private static final Logger log = LoggerFactory.getLogger(BenchmarkRunner.class);
+    private static final Logger log = LogManager.getLogger(BenchmarkRunner.class);
 
     private static final Histogram opLatency =
             Histogram.builder()
