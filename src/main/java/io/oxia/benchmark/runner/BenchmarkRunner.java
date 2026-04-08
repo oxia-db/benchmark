@@ -176,10 +176,11 @@ public class BenchmarkRunner {
                     });
 
             intendedStartNanos += intervalNanos;
-            // If we're ahead of schedule (system is fast), snap to now
-            // to avoid accumulating negative offsets
+            // Snap intended time to now if it drifts too far in either direction.
+            // This prevents accumulating huge latency values after stalls (e.g. GC pauses)
+            // or negative offsets when the system is faster than expected.
             long now = System.nanoTime();
-            if (intendedStartNanos > now) {
+            if (Math.abs(now - intendedStartNanos) > intervalNanos * 10) {
                 intendedStartNanos = now;
             }
         }
