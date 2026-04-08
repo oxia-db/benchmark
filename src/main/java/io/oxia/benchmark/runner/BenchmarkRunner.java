@@ -185,6 +185,14 @@ public class BenchmarkRunner {
         }
     }
 
+    private static double safeMax(ConcurrentDoubleHistogram hist) {
+        return hist.getTotalCount() == 0 ? 0.0 : hist.getMaxValue();
+    }
+
+    private static double safePercentile(ConcurrentDoubleHistogram hist, double percentile) {
+        return hist.getTotalCount() == 0 ? 0.0 : hist.getValueAtPercentile(percentile);
+    }
+
     private static void printStats(
             ConcurrentDoubleHistogram writeHist,
             ConcurrentDoubleHistogram readHist,
@@ -204,16 +212,16 @@ public class BenchmarkRunner {
                 writeRate + readRate,
                 failedRate,
                 writeRate,
-                writeHist.getValueAtPercentile(50),
-                writeHist.getValueAtPercentile(95),
-                writeHist.getValueAtPercentile(99),
-                writeHist.getValueAtPercentile(99.9),
-                writeHist.getMaxValue(),
+                safePercentile(writeHist, 50),
+                safePercentile(writeHist, 95),
+                safePercentile(writeHist, 99),
+                safePercentile(writeHist, 99.9),
+                safeMax(writeHist),
                 readRate,
-                readHist.getValueAtPercentile(50),
-                readHist.getValueAtPercentile(95),
-                readHist.getValueAtPercentile(99),
-                readHist.getValueAtPercentile(99.9),
-                readHist.getMaxValue());
+                safePercentile(readHist, 50),
+                safePercentile(readHist, 95),
+                safePercentile(readHist, 99),
+                safePercentile(readHist, 99.9),
+                safeMax(readHist));
     }
 }
