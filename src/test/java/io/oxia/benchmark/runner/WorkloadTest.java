@@ -27,7 +27,7 @@ class WorkloadTest {
     @Test
     void loadValidWorkloads() throws IOException {
         Workloads wls = Workloads.load(Path.of("conf/workload-mixed.yaml"));
-        assertThat(wls.items()).hasSize(4);
+        assertThat(wls.items()).hasSize(1);
         assertThat(wls.exitWhenFinish()).isFalse();
         assertThat(wls.metadata().serverNum()).isEqualTo(1);
     }
@@ -41,7 +41,7 @@ class WorkloadTest {
         assertThat(first.keyDistribution()).isEqualTo("order");
         assertThat(first.valueSize()).isEqualTo(64);
         assertThat(first.targetRate()).isEqualTo(40_000);
-        assertThat(first.parallelism()).isEqualTo(1);
+        assertThat(first.parallelism()).isEqualTo(16);
     }
 
     @Test

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yyyy/MM/dd HH:mm:ss} %-5level %msg %X%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="io.etcd" level="WARN"/>
+        <Logger name="io.grpc" level="WARN"/>
+        <Logger name="io.netty" level="WARN"/>
+        <Logger name="org.apache.zookeeper" level="WARN"/>
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>

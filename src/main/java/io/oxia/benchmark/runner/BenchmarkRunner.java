@@ -37,8 +37,8 @@ public class BenchmarkRunner {
                     .name("kv_op_latency_seconds")
                     .help("Operation latency")
                     .labelNames("driver", "type", "ok")
-                    .nativeOnly()
-                    .nativeMaxNumberOfBuckets(10)
+                    .classicOnly()
+                    .classicUpperBounds(.0001, .0005, .001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10)
                     .register();
 
     private final Workload workload;
