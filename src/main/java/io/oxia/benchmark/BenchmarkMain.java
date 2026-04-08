@@ -24,19 +24,17 @@ import io.oxia.benchmark.runner.Workloads;
 import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.CustomLog;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+@CustomLog
 @Command(
         name = "oxia-benchmark",
         mixinStandardHelpOptions = true,
         description = "Distributed KV load generator")
 public class BenchmarkMain implements Callable<Integer> {
-
-    private static final Logger log = LogManager.getLogger(BenchmarkMain.class);
 
     @Option(names = "--driver-config", required = true, description = "Path to driver config YAML")
     private Path driverConfigPath;
@@ -57,10 +55,10 @@ public class BenchmarkMain implements Callable<Integer> {
             String[] parts = metricsAddr.split(":");
             int port = Integer.parseInt(parts[parts.length - 1]);
             HTTPServer metricsServer = HTTPServer.builder().port(port).buildAndStart();
-            log.info("Serving Prometheus metrics at http://localhost:{}/metrics", port);
+            log.infof("Serving Prometheus metrics at http://localhost:%d/metrics", port);
 
             DriverConfig driverConf = DriverConfig.load(driverConfigPath);
-            log.info("Loaded driver configuration: {}", driverConf);
+            log.info().attr("driverConfig", driverConf).log("Loaded driver configuration");
 
             Workloads wls = Workloads.load(workloadsPath);
             log.info("Loaded workloads configuration");
@@ -68,7 +66,7 @@ public class BenchmarkMain implements Callable<Integer> {
             try (KVStoreDriver driver = DriverFactory.build(driverConf)) {
                 for (int i = 0; i < wls.items().size(); i++) {
                     Workload workload = wls.items().get(i);
-                    log.info("Starting workload {}", workload);
+                    log.info().attr("workload", workload).log("Starting workload");
 
                     boolean success = false;
                     int maxRetries = 5;
@@ -77,11 +75,11 @@ public class BenchmarkMain implements Callable<Integer> {
                             new BenchmarkRunner(workload, driver).run();
                             success = true;
                         } catch (Exception e) {
-                            log.error(
-                                    "Workload interrupted by error, retrying (attempt {}/{})",
-                                    attempt + 1,
-                                    maxRetries,
-                                    e);
+                            log.error()
+                                    .attr("attempt", attempt + 1)
+                                    .attr("maxRetries", maxRetries)
+                                    .exception(e)
+                                    .log("Workload interrupted by error, retrying");
                             Thread.sleep(Math.min(1000L * (1 << attempt), 30_000));
                         }
                     }
@@ -100,7 +98,7 @@ public class BenchmarkMain implements Callable<Integer> {
             metricsServer.close();
             return 0;
         } catch (Exception e) {
-            log.error("Benchmark failed", e);
+            log.error().exception(e).log("Benchmark failed");
             return 1;
         }
     }

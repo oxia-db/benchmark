@@ -53,7 +53,12 @@ dependencies {
     // Rate limiting
     implementation("com.google.guava:guava:33.4.0-jre")
 
-    // Logging (Log4j2 with SLF4J bridge)
+    // Lombok
+    compileOnly("org.projectlombok:lombok:1.18.36")
+    annotationProcessor("org.projectlombok:lombok:1.18.36")
+
+    // Logging
+    implementation("io.github.merlimat.slog:slog:0.9.5")
     implementation("org.apache.logging.log4j:log4j-api:2.24.3")
     implementation("org.apache.logging.log4j:log4j-core:2.24.3")
     implementation("org.apache.logging.log4j:log4j-slf4j2-impl:2.24.3")

@@ -22,17 +22,15 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.CustomLog;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
 
+@CustomLog
 public class ZooKeeperDriver implements KVStoreDriver {
-
-    private static final Logger log = LogManager.getLogger(ZooKeeperDriver.class);
 
     private ZooKeeper zk;
 
@@ -44,7 +42,7 @@ public class ZooKeeperDriver implements KVStoreDriver {
     @Override
     @SuppressWarnings("unchecked")
     public void init(Map<String, Object> config) throws Exception {
-        log.info("Initializing ZooKeeper driver with config: {}", config);
+        log.info().attr("config", config).log("Initializing ZooKeeper driver");
 
         Object serversObj = config.get("servers");
         if (serversObj == null) {
@@ -69,7 +67,7 @@ public class ZooKeeperDriver implements KVStoreDriver {
                             if (event.getState() == Watcher.Event.KeeperState.SyncConnected) {
                                 connectedLatch.countDown();
                             }
-                            log.info("ZK event: {}", event);
+                            log.info().attr("event", event).log("ZK event");
                         });
 
         if (!connectedLatch.await(30, TimeUnit.SECONDS)) {

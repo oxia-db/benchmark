@@ -26,13 +26,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
+import lombok.CustomLog;
 import org.HdrHistogram.ConcurrentDoubleHistogram;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
+@CustomLog
 public class BenchmarkRunner {
-
-    private static final Logger log = LogManager.getLogger(BenchmarkRunner.class);
 
     private static final Histogram opLatency =
             Histogram.builder()
@@ -52,7 +50,7 @@ public class BenchmarkRunner {
     }
 
     public void run() throws InterruptedException {
-        log.info("Running workload {}", workload);
+        log.info().attr("workload", workload).log("Running workload");
 
         SequenceGenerator seqGen =
                 SequenceGenerator.create(workload.keyDistribution(), workload.keyspaceSize());
@@ -116,7 +114,6 @@ public class BenchmarkRunner {
             worker.join(5000);
         }
 
-        log.info("-------------------------------------------------------");
         log.info("Cumulative write/read latencies");
         printStats(
                 totalWriteHist,
@@ -158,7 +155,7 @@ public class BenchmarkRunner {
                     (v, ex) -> {
                         double latencyMs = (System.nanoTime() - capturedIntended) / 1_000_000.0;
                         if (ex != null) {
-                            log.error("Operation error", ex);
+                            log.error().exception(ex).log("Operation error");
                             periodFailedOps.increment();
                             totalFailedOps.increment();
                             opLatency
@@ -198,26 +195,25 @@ public class BenchmarkRunner {
         double readRate = readHist.getTotalCount() / periodSec;
         double failedRate = failedOps.sum() / periodSec;
 
-        log.info(
-                String.format(
-                        "Stats - Total ops: %6.1f ops/s - Failed ops: %6.1f ops/s%n"
-                                + "                Write ops %6.1f w/s  Latency ms: 50%% %5.1f - 95%% %5.1f - 99%%"
-                                + " %5.1f - 99.9%% %5.1f - max %6.1f%n"
-                                + "                Read  ops %6.1f r/s  Latency ms: 50%% %5.1f - 95%% %5.1f - 99%%"
-                                + " %5.1f - 99.9%% %5.1f - max %6.1f",
-                        writeRate + readRate,
-                        failedRate,
-                        writeRate,
-                        writeHist.getValueAtPercentile(50),
-                        writeHist.getValueAtPercentile(95),
-                        writeHist.getValueAtPercentile(99),
-                        writeHist.getValueAtPercentile(99.9),
-                        writeHist.getMaxValue(),
-                        readRate,
-                        readHist.getValueAtPercentile(50),
-                        readHist.getValueAtPercentile(95),
-                        readHist.getValueAtPercentile(99),
-                        readHist.getValueAtPercentile(99.9),
-                        readHist.getMaxValue()));
+        log.infof(
+                "Stats - Total ops: %6.1f ops/s - Failed ops: %6.1f ops/s%n"
+                        + "                Write ops %6.1f w/s  Latency ms: 50%% %5.1f - 95%% %5.1f - 99%%"
+                        + " %5.1f - 99.9%% %5.1f - max %6.1f%n"
+                        + "                Read  ops %6.1f r/s  Latency ms: 50%% %5.1f - 95%% %5.1f - 99%%"
+                        + " %5.1f - 99.9%% %5.1f - max %6.1f",
+                writeRate + readRate,
+                failedRate,
+                writeRate,
+                writeHist.getValueAtPercentile(50),
+                writeHist.getValueAtPercentile(95),
+                writeHist.getValueAtPercentile(99),
+                writeHist.getValueAtPercentile(99.9),
+                writeHist.getMaxValue(),
+                readRate,
+                readHist.getValueAtPercentile(50),
+                readHist.getValueAtPercentile(95),
+                readHist.getValueAtPercentile(99),
+                readHist.getValueAtPercentile(99.9),
+                readHist.getMaxValue());
     }
 }

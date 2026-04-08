@@ -26,12 +26,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.CustomLog;
 
+@CustomLog
 public class EtcdDriver implements KVStoreDriver {
-
-    private static final Logger log = LogManager.getLogger(EtcdDriver.class);
 
     private Client client;
     private KV kvClient;
@@ -44,7 +42,7 @@ public class EtcdDriver implements KVStoreDriver {
     @Override
     @SuppressWarnings("unchecked")
     public void init(Map<String, Object> config) throws Exception {
-        log.info("Initializing etcd driver with config: {}", config);
+        log.info().attr("config", config).log("Initializing etcd driver");
 
         Object endpointsObj = config.get("endpoints");
         if (endpointsObj == null) {

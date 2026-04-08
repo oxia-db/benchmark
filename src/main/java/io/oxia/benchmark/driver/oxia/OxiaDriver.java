@@ -22,12 +22,10 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.CustomLog;
 
+@CustomLog
 public class OxiaDriver implements KVStoreDriver {
-
-    private static final Logger log = LogManager.getLogger(OxiaDriver.class);
 
     private AsyncOxiaClient client;
 
@@ -38,7 +36,7 @@ public class OxiaDriver implements KVStoreDriver {
 
     @Override
     public void init(Map<String, Object> config) throws Exception {
-        log.info("Initializing Oxia driver with config: {}", config);
+        log.info().attr("config", config).log("Initializing Oxia driver");
 
         String serviceAddress = (String) config.getOrDefault("serviceAddress", "localhost:6648");
         OxiaClientBuilder builder = OxiaClientBuilder.create(serviceAddress);
