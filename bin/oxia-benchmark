@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# Run oxia-benchmark from either a development build or an installed distribution.
+#
+
+set -euo pipefail
+
+# Resolve the base directory (parent of bin/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Find the JAR — prefer shadow (fat) jar from a Gradle build
+JAR="$(ls "$BASE_DIR"/build/libs/*-all.jar 2>/dev/null | head -1 || true)"
+
+if [ -z "$JAR" ]; then
+    # Try installed distribution layout (lib/)
+    JAR="$(ls "$BASE_DIR"/lib/*-all.jar 2>/dev/null | head -1 || true)"
+fi
+
+if [ -z "$JAR" ]; then
+    # No jar found — build it
+    echo "No shadow jar found, building..." >&2
+    "$BASE_DIR/gradlew" -p "$BASE_DIR" shadowJar -q
+    JAR="$(ls "$BASE_DIR"/build/libs/*-all.jar 2>/dev/null | head -1)"
+fi
+
+PERF_OPTS=(
+    -server
+    -Xms512m
+    -XX:+UseZGC
+    -XX:+AlwaysPreTouch
+    -XX:+ParallelRefProcEnabled
+    -Djava.net.preferIPv4Stack=true
+    -Dio.netty.recycler.maxCapacityPerThread=4096
+)
+
+# UseBiasedLocking was removed in JDK 19
+JDK_VER=$(java -version 2>&1 | head -1 | sed 's/.*"\([0-9]*\).*/\1/')
+if [ "$JDK_VER" -lt 19 ] 2>/dev/null; then
+    PERF_OPTS+=(-XX:-UseBiasedLocking)
+fi
+
+exec java "${PERF_OPTS[@]}" ${JAVA_OPTS:-} -jar "$JAR" "$@"
