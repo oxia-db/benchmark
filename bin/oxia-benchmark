@@ -34,6 +34,7 @@ PERF_OPTS=(
     -Dio.netty.recycler.maxCapacityPerThread=4096
     --add-opens=java.base/java.nio=ALL-UNNAMED
     --add-opens=jdk.unsupported/sun.misc=ALL-UNNAMED
+    --sun-misc-unsafe-memory-access=allow
 )
 
 # UseBiasedLocking was removed in JDK 19
