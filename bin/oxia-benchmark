@@ -32,6 +32,8 @@ PERF_OPTS=(
     -XX:+ParallelRefProcEnabled
     -Djava.net.preferIPv4Stack=true
     -Dio.netty.recycler.maxCapacityPerThread=4096
+    --add-opens=java.base/sun.misc=ALL-UNNAMED
+    --add-opens=java.base/java.nio=ALL-UNNAMED
 )
 
 # UseBiasedLocking was removed in JDK 19
