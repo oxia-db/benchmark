@@ -8,7 +8,7 @@ Oxia Benchmark is a versatile and extensible framework for benchmarking distribu
 - **Coordinated Omission Correction:** Latency measurements use intended send times rather than actual dispatch times, avoiding the [coordinated omission](https://www.scylladb.com/2021/04/22/on-coordinated-omission/) problem that plagues most benchmarking tools. When the system under test slows down, the queuing delay is correctly reflected in percentile latencies.
 - **Distributed Load Generation:** Scale beyond single-node bottlenecks by deploying multiple worker pods on Kubernetes, each generating load against the same cluster. Each worker independently tracks its own target rate and latency measurements.
 - **YCSB-Style Workloads:** Run industry-standard [YCSB](https://github.com/brianfrankcooper/YCSB) workload scenarios (A, C, D, X) with configurable read/write ratios, key distributions (uniform, zipf, sequential), and key space sizes.
-- **Extensible Plugin Architecture:** Add support for new key-value stores by implementing a Go plugin driver, without modifying the core benchmark code.
+- **Extensible Plugin Architecture:** Add support for new key-value stores by implementing the `KVStoreDriver` Java interface, without modifying the core benchmark code.
 - **Kubernetes-Native Deployment:** Deploy the complete benchmark environment — including the systems under test — using Helm charts with pre-configured cluster topologies (3, 6, 12 servers).
 - **Prometheus Metrics:** Monitor benchmark performance in real-time via the built-in Prometheus exporter, with per-operation latency histograms labeled by driver, operation type, and success/failure.
 - **Rate-Limited Traffic Generation:** Per-worker token bucket rate limiting ensures precise control over target throughput, independent of system response times.
@@ -17,26 +17,31 @@ Oxia Benchmark is a versatile and extensible framework for benchmarking distribu
 
 ### Prerequisites
 
-- Go 1.26+
+- Java 17+
 - Docker (for building the container image)
-- `make`
-- `golangci-lint` (optional, for linting)
+- `make` (optional, for convenience targets)
 
 ## Local Usage
 
 ### Build
 
-To build the benchmark tool and the driver plugins, run the following command:
+To build the benchmark tool as a shadow JAR (fat JAR with all dependencies):
 
 ```bash
 make build
 ```
 
-This will create the `oxia-benchmark` binary and the driver plugins in the `build/` directory.
+Or using Gradle directly:
+
+```bash
+./gradlew shadowJar
+```
+
+This creates the `oxia-benchmark-*-all.jar` in `build/libs/`.
 
 ### Lint
 
-To run linting across all modules:
+To check code formatting:
 
 ```bash
 make lint
@@ -55,19 +60,19 @@ make test
 To execute a benchmark, you need to provide a driver configuration file and a workload configuration file.
 
 ```bash
-./build/oxia-benchmark --driver-config conf/driver-oxia.yaml --workloads conf/workload-mixed.yaml
+java -jar build/libs/oxia-benchmark-*-all.jar --driver-config conf/driver-oxia.yaml --workloads conf/workload-mixed.yaml
 ```
 
 Example output:
 
 ```
-2025/06/15 10:00:00 INFO Running workload workload="{ReadRatio:0 KeyspaceSize:100000 KeyDistribution:order ValueSize:64 TargetRate:40000 Duration:10s Parallelism:1}"
+2025/06/15 10:00:00 INFO Running workload {readRatio=0.0, keyspaceSize=100000, keyDistribution=order, valueSize=64, targetRate=40000, duration=10s, parallelism=1}
 2025/06/15 10:00:10 INFO Stats - Total ops: 39850.2 ops/s - Failed ops:    0.0 ops/s
                 Write ops 39850.2 w/s  Latency ms: 50%   0.3 - 95%   0.8 - 99%   1.2 - 99.9%   2.5 - max    5.1
                 Read  ops    0.0 r/s  Latency ms: 50%   0.0 - 95%   0.0 - 99%   0.0 - 99.9%   0.0 - max    0.0
 ```
 
-To clean up the build artifacts, run:
+To clean up build artifacts:
 
 ```bash
 make clean
@@ -150,12 +155,11 @@ The benchmark tool exposes Prometheus metrics on port `8080` by default at `/met
 
 ## Extending the Benchmark
 
-To add support for a new key-value store, you can create a new driver.
+To add support for a new key-value store:
 
-1.  Create a new directory in the `drivers/` directory with its own `go.mod`.
-2.  Implement the `drivers.KVStoreDriver` interface in your new driver.
-3.  Add a build target to the `Makefile` to build your driver as a Go plugin.
-4.  Add the new module to `go.work` and run `go work sync` to keep dependencies aligned.
+1.  Create a new class implementing the `KVStoreDriver` interface in `src/main/java/io/oxia/benchmark/driver/`.
+2.  Register the driver in `DriverFactory.java`.
+3.  Add any required client library dependencies to `build.gradle.kts`.
 
 ## Contributing
 
