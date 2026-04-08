@@ -25,8 +25,9 @@ group = "io.oxia"
 version = "0.1.0-SNAPSHOT"
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
 
 repositories {
@@ -107,7 +108,7 @@ spotless {
             " * See the License for the specific language governing permissions and\n" +
             " * limitations under the License.\n" +
             " */")
-        googleJavaFormat()
+        googleJavaFormat("1.28.0")
         importOrder()
         removeUnusedImports()
         leadingSpacesToTabs(2)
