@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Oxia Authors
+ * Copyright © 2025 The Oxia Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package io.oxia.benchmark.driver;
 
 import java.io.Closeable;
@@ -22,11 +21,11 @@ import java.util.concurrent.CompletableFuture;
 
 public interface KVStoreDriver extends Closeable {
 
-  String name();
+    String name();
 
-  void init(Map<String, Object> config) throws Exception;
+    void init(Map<String, Object> config) throws Exception;
 
-  CompletableFuture<Void> put(String key, byte[] value);
+    CompletableFuture<Void> put(String key, byte[] value);
 
-  CompletableFuture<Void> get(String key);
+    CompletableFuture<Void> get(String key);
 }

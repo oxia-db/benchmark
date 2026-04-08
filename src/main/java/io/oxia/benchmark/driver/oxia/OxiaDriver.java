@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Oxia Authors
+ * Copyright © 2025 The Oxia Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package io.oxia.benchmark.driver.oxia;
 
 import io.oxia.benchmark.driver.KVStoreDriver;
@@ -28,66 +27,66 @@ import org.slf4j.LoggerFactory;
 
 public class OxiaDriver implements KVStoreDriver {
 
-  private static final Logger log = LoggerFactory.getLogger(OxiaDriver.class);
+    private static final Logger log = LoggerFactory.getLogger(OxiaDriver.class);
 
-  private AsyncOxiaClient client;
+    private AsyncOxiaClient client;
 
-  @Override
-  public String name() {
-    return "oxia";
-  }
-
-  @Override
-  public void init(Map<String, Object> config) throws Exception {
-    log.info("Initializing Oxia driver with config: {}", config);
-
-    String serviceAddress = (String) config.getOrDefault("serviceAddress", "localhost:6648");
-    OxiaClientBuilder builder = OxiaClientBuilder.create(serviceAddress);
-
-    if (config.containsKey("namespace")) {
-      builder.namespace((String) config.get("namespace"));
-    }
-    if (config.containsKey("batchLinger")) {
-      Duration batchLinger = parseDuration((String) config.get("batchLinger"));
-      builder.batchLinger(batchLinger);
-    }
-    if (config.containsKey("batchMaxCount")) {
-      int batchMaxCount = ((Number) config.get("batchMaxCount")).intValue();
-      builder.maxRequestsPerBatch(batchMaxCount);
+    @Override
+    public String name() {
+        return "oxia";
     }
 
-    client = builder.asyncClient().get();
-  }
+    @Override
+    public void init(Map<String, Object> config) throws Exception {
+        log.info("Initializing Oxia driver with config: {}", config);
 
-  @Override
-  public CompletableFuture<Void> put(String key, byte[] value) {
-    return client.put(key, value).thenApply(r -> null);
-  }
+        String serviceAddress = (String) config.getOrDefault("serviceAddress", "localhost:6648");
+        OxiaClientBuilder builder = OxiaClientBuilder.create(serviceAddress);
 
-  @Override
-  public CompletableFuture<Void> get(String key) {
-    // get() returns null when key not found, no exception thrown
-    return client.get(key).thenApply(r -> null);
-  }
+        if (config.containsKey("namespace")) {
+            builder.namespace((String) config.get("namespace"));
+        }
+        if (config.containsKey("batchLinger")) {
+            Duration batchLinger = parseDuration((String) config.get("batchLinger"));
+            builder.batchLinger(batchLinger);
+        }
+        if (config.containsKey("batchMaxCount")) {
+            int batchMaxCount = ((Number) config.get("batchMaxCount")).intValue();
+            builder.maxRequestsPerBatch(batchMaxCount);
+        }
 
-  @Override
-  public void close() throws IOException {
-    if (client != null) {
-      try {
-        client.close();
-      } catch (Exception e) {
-        throw new IOException(e);
-      }
+        client = builder.asyncClient().get();
     }
-  }
 
-  private static Duration parseDuration(String s) {
-    if (s.endsWith("ms")) {
-      return Duration.ofMillis(Long.parseLong(s.substring(0, s.length() - 2)));
+    @Override
+    public CompletableFuture<Void> put(String key, byte[] value) {
+        return client.put(key, value).thenApply(r -> null);
     }
-    if (s.endsWith("s")) {
-      return Duration.ofSeconds(Long.parseLong(s.substring(0, s.length() - 1)));
+
+    @Override
+    public CompletableFuture<Void> get(String key) {
+        // get() returns null when key not found, no exception thrown
+        return client.get(key).thenApply(r -> null);
     }
-    return Duration.parse("PT" + s);
-  }
+
+    @Override
+    public void close() throws IOException {
+        if (client != null) {
+            try {
+                client.close();
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+        }
+    }
+
+    private static Duration parseDuration(String s) {
+        if (s.endsWith("ms")) {
+            return Duration.ofMillis(Long.parseLong(s.substring(0, s.length() - 2)));
+        }
+        if (s.endsWith("s")) {
+            return Duration.ofSeconds(Long.parseLong(s.substring(0, s.length() - 1)));
+        }
+        return Duration.parse("PT" + s);
+    }
 }

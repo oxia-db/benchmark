@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Oxia Authors
+ * Copyright © 2025 The Oxia Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package io.oxia.benchmark.driver;
 
 import io.oxia.benchmark.driver.etcd.EtcdDriver;
@@ -22,17 +21,17 @@ import io.oxia.benchmark.driver.zookeeper.ZooKeeperDriver;
 
 public final class DriverFactory {
 
-  private DriverFactory() {}
+    private DriverFactory() {}
 
-  public static KVStoreDriver build(DriverConfig conf) throws Exception {
-    KVStoreDriver driver =
-        switch (conf.driver()) {
-          case "oxia" -> new OxiaDriver();
-          case "etcd" -> new EtcdDriver();
-          case "zookeeper" -> new ZooKeeperDriver();
-          default -> throw new IllegalArgumentException("Unknown driver: " + conf.driver());
-        };
-    driver.init(conf.config());
-    return driver;
-  }
+    public static KVStoreDriver build(DriverConfig conf) throws Exception {
+        KVStoreDriver driver =
+                switch (conf.driver()) {
+                    case "oxia" -> new OxiaDriver();
+                    case "etcd" -> new EtcdDriver();
+                    case "zookeeper" -> new ZooKeeperDriver();
+                    default -> throw new IllegalArgumentException("Unknown driver: " + conf.driver());
+                };
+        driver.init(conf.config());
+        return driver;
+    }
 }

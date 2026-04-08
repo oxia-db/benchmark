@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Oxia Authors
+ * Copyright © 2025 The Oxia Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,21 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package io.oxia.benchmark.runner.sequence;
 
 public interface SequenceGenerator {
 
-  long next();
+    long next();
 
-  static SequenceGenerator create(String distribution, long maxSequence) {
-    return switch (distribution) {
-      case "uniform" -> new UniformGenerator(maxSequence);
-      case "zipf" -> new ZipfGenerator(maxSequence);
-      case "order" -> new OrderGenerator(maxSequence);
-      default ->
-          throw new IllegalArgumentException(
-              "Unsupported key distribution: " + distribution);
-    };
-  }
+    static SequenceGenerator create(String distribution, long maxSequence) {
+        return switch (distribution) {
+            case "uniform" -> new UniformGenerator(maxSequence);
+            case "zipf" -> new ZipfGenerator(maxSequence);
+            case "order" -> new OrderGenerator(maxSequence);
+            default ->
+                    throw new IllegalArgumentException("Unsupported key distribution: " + distribution);
+        };
+    }
 }

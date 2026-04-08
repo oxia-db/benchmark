@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Oxia Authors
+ * Copyright © 2025 The Oxia Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,21 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package io.oxia.benchmark.runner.sequence;
 
 import java.util.concurrent.ThreadLocalRandom;
 
 final class UniformGenerator implements SequenceGenerator {
 
-  private final long maxSequence;
+    private final long maxSequence;
 
-  UniformGenerator(long maxSequence) {
-    this.maxSequence = maxSequence;
-  }
+    UniformGenerator(long maxSequence) {
+        this.maxSequence = maxSequence;
+    }
 
-  @Override
-  public long next() {
-    return ThreadLocalRandom.current().nextLong(maxSequence);
-  }
+    @Override
+    public long next() {
+        return ThreadLocalRandom.current().nextLong(maxSequence);
+    }
 }
