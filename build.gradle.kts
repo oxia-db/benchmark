@@ -53,9 +53,10 @@ dependencies {
     // Rate limiting
     implementation("com.google.guava:guava:33.4.0-jre")
 
-    // Logging
-    implementation("org.slf4j:slf4j-api:2.0.17")
-    implementation("ch.qos.logback:logback-classic:1.5.18")
+    // Logging (Log4j2 with SLF4J bridge)
+    implementation("org.apache.logging.log4j:log4j-api:2.24.3")
+    implementation("org.apache.logging.log4j:log4j-core:2.24.3")
+    implementation("org.apache.logging.log4j:log4j-slf4j2-impl:2.24.3")
 
     // Drivers
     implementation("io.github.oxia-db:oxia-client:0.7.4")
