@@ -13,40 +13,25 @@
 # limitations under the License.
 
 APP_NAME=oxia-benchmark
-BUILD_DIR=build
 
-.PHONY: all build run docker clean tidy lint test
+.PHONY: all build run docker clean lint test
 
-all: tidy build
-
-tidy:
-	cd drivers && go mod tidy
-	cd drivers/oxia && go mod tidy
-	cd drivers/etcd && go mod tidy
-	cd drivers/zookeeper && go mod tidy
-	go mod tidy
+all: build
 
 build:
-	go build -o $(BUILD_DIR)/$(APP_NAME) ./cmd/oxia-benchmark
-	cd drivers/oxia && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-oxia.so .
-	cd drivers/etcd && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-etcd.so .
-	cd drivers/zookeeper && go build -buildmode=plugin -o ../../$(BUILD_DIR)/driver-zookeeper.so .
+	./gradlew shadowJar
 
 test:
-	go test ./...
-	cd drivers && go test ./...
+	./gradlew test
 
 lint:
-	golangci-lint run ./...
-	cd drivers/oxia && golangci-lint run ./...
-	cd drivers/etcd && golangci-lint run ./...
-	cd drivers/zookeeper && golangci-lint run ./...
+	./gradlew spotlessCheck
 
 run:
-	$(BUILD_DIR)/$(APP_NAME) --driver-config conf/driver-etcd.yaml --workloads conf/workload-mixed.yaml
+	java -jar build/libs/$(APP_NAME)-*-all.jar --driver-config conf/driver-oxia.yaml --workloads conf/workload-mixed.yaml
 
 docker:
 	docker build -t $(APP_NAME):latest .
 
 clean:
-	rm -rf $(BUILD_DIR)
+	./gradlew clean

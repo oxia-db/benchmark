@@ -1,9 +1,0 @@
-go 1.26
-
-use (
-	.
-	./drivers
-	./drivers/etcd
-	./drivers/oxia
-	./drivers/zookeeper
-)

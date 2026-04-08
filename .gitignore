@@ -12,34 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Gradle
+build/
+.gradle/
 
-### Go template
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
 
-# Test binary, built with `go test -c`
-*.test
+# Java
+*.class
+*.war
+*.ear
+hs_err_pid*
 
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
+# Keep Gradle wrapper jar
+!gradle/wrapper/gradle-wrapper.jar
 
 # env file
 .env
 
-build
-/oxia-benchmark
-.idea
-
-*.tgz
+# OS
 .DS_Store
+
+# Helm
+*.tgz

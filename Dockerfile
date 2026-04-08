@@ -12,19 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.26-alpine AS builder
-RUN apk add --no-cache gcc musl-dev
+FROM eclipse-temurin:17-jdk-alpine AS builder
 WORKDIR /app
 COPY . .
-RUN mkdir -p binary/build
-RUN go build -o /app/binary/oxia-benchmark ./cmd/oxia-benchmark
-RUN cd /app/drivers/oxia && go build -buildmode=plugin -o /app/binary/build/driver-oxia.so .
-RUN cd /app/drivers/etcd && go build -buildmode=plugin -o /app/binary/build/driver-etcd.so .
-RUN cd /app/drivers/zookeeper && go build -buildmode=plugin -o /app/binary/build/driver-zookeeper.so .
+RUN ./gradlew shadowJar --no-daemon
 
-FROM alpine:3
-RUN apk add --no-cache ca-certificates
-
+FROM eclipse-temurin:17-jre-alpine
 WORKDIR /bench
-COPY --from=builder /app/binary/ /bench/
-ENTRYPOINT ["/bench/oxia-benchmark"]
+COPY --from=builder /app/build/libs/*-all.jar /bench/oxia-benchmark.jar
+COPY conf /bench/conf
+ENTRYPOINT ["java", "-jar", "/bench/oxia-benchmark.jar"]
