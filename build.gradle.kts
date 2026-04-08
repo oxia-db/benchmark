@@ -51,9 +51,6 @@ dependencies {
     implementation("io.prometheus:prometheus-metrics-exporter-httpserver:1.3.6")
     implementation("io.prometheus:prometheus-metrics-instrumentation-jvm:1.3.6")
 
-    // Rate limiting
-    implementation("com.google.guava:guava:33.4.0-jre")
-
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.36")
     annotationProcessor("org.projectlombok:lombok:1.18.36")

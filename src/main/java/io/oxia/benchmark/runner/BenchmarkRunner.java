@@ -15,7 +15,6 @@
  */
 package io.oxia.benchmark.runner;
 
-import com.google.common.util.concurrent.RateLimiter;
 import io.oxia.benchmark.driver.KVStoreDriver;
 import io.oxia.benchmark.runner.sequence.SequenceGenerator;
 import io.prometheus.metrics.core.metrics.Histogram;
@@ -24,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
 import lombok.CustomLog;
@@ -32,11 +32,22 @@ import org.HdrHistogram.ConcurrentDoubleHistogram;
 @CustomLog
 public class BenchmarkRunner {
 
+    private static final long MAX_LATENCY_MICROS = TimeUnit.SECONDS.toMicros(60);
+
     private static final Histogram opLatency =
             Histogram.builder()
                     .name("kv_op_latency_seconds")
                     .help("Operation latency")
                     .labelNames("driver", "type", "ok")
+                    .classicOnly()
+                    .classicUpperBounds(.0001, .0005, .001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10)
+                    .register();
+
+    private static final Histogram schedDelay =
+            Histogram.builder()
+                    .name("kv_scheduling_delay_seconds")
+                    .help("Scheduling delay (intended vs actual send time)")
+                    .labelNames("driver", "type")
                     .classicOnly()
                     .classicUpperBounds(.0001, .0005, .001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10)
                     .register();
@@ -122,7 +133,6 @@ public class BenchmarkRunner {
                 Duration.ofNanos(System.nanoTime() - startNanos));
     }
 
-    @SuppressWarnings("UnstableApiUsage")
     private void generateTraffic(
             SequenceGenerator seqGen,
             AtomicBoolean running,
@@ -135,32 +145,41 @@ public class BenchmarkRunner {
 
         byte[] value = new byte[workload.valueSize()];
         double perWorkerRate = workload.targetRate() / workload.parallelism();
-        long intervalNanos = (long) (1_000_000_000.0 / perWorkerRate);
-        RateLimiter limiter = RateLimiter.create(perWorkerRate);
-
-        // Track the intended send time to account for coordinated omission.
-        long intendedStartNanos = System.nanoTime();
+        UniformRateLimiter limiter = new UniformRateLimiter(perWorkerRate);
 
         while (running.get()) {
-            limiter.acquire();
+            long intendedSendTime = limiter.acquire();
+            UniformRateLimiter.sleepUntil(intendedSendTime);
             if (!running.get()) break;
 
-            String key = String.format("k-%016d", seqGen.next());
-            long capturedIntended = intendedStartNanos;
+            long sendTimeNanos = System.nanoTime();
 
+            String key = String.format("k-%016d", seqGen.next());
             boolean isRead = ThreadLocalRandom.current().nextDouble() < workload.readRatio();
+            String opType = isRead ? "read" : "write";
             CompletableFuture<Void> future = isRead ? driver.get(key) : driver.put(key, value);
+
+            // Record scheduling delay (intended vs actual send time)
+            long sendDelayMicros =
+                    Math.min(
+                            MAX_LATENCY_MICROS, TimeUnit.NANOSECONDS.toMicros(sendTimeNanos - intendedSendTime));
+            schedDelay.labelValues(driver.name(), opType).observe(sendDelayMicros / 1_000_000.0);
 
             future.whenComplete(
                     (v, ex) -> {
-                        double latencyMs = (System.nanoTime() - capturedIntended) / 1_000_000.0;
+                        // End-to-end latency: actual send time to completion
+                        long latencyMicros =
+                                Math.min(
+                                        MAX_LATENCY_MICROS,
+                                        TimeUnit.NANOSECONDS.toMicros(System.nanoTime() - sendTimeNanos));
+                        double latencyMs = latencyMicros / 1_000.0;
                         if (ex != null) {
                             log.error().exception(ex).log("Operation error");
                             periodFailedOps.increment();
                             totalFailedOps.increment();
                             opLatency
-                                    .labelValues(driver.name(), isRead ? "read" : "write", "false")
-                                    .observe(latencyMs / 1000.0);
+                                    .labelValues(driver.name(), opType, "false")
+                                    .observe(latencyMicros / 1_000_000.0);
                         } else {
                             if (isRead) {
                                 periodReadHist.recordValue(latencyMs);
@@ -170,19 +189,10 @@ public class BenchmarkRunner {
                                 totalWriteHist.recordValue(latencyMs);
                             }
                             opLatency
-                                    .labelValues(driver.name(), isRead ? "read" : "write", "true")
-                                    .observe(latencyMs / 1000.0);
+                                    .labelValues(driver.name(), opType, "true")
+                                    .observe(latencyMicros / 1_000_000.0);
                         }
                     });
-
-            intendedStartNanos += intervalNanos;
-            // Snap intended time to now if it drifts too far in either direction.
-            // This prevents accumulating huge latency values after stalls (e.g. GC pauses)
-            // or negative offsets when the system is faster than expected.
-            long now = System.nanoTime();
-            if (Math.abs(now - intendedStartNanos) > intervalNanos * 10) {
-                intendedStartNanos = now;
-            }
         }
     }
 
