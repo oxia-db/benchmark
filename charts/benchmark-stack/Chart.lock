@@ -8,5 +8,8 @@ dependencies:
 - name: oxia-cluster
   repository: https://oxia-db.github.io/helm-charts/
   version: 0.0.3
-digest: sha256:1a71ebcfbf5deb846eba8e2feac402e430d946f8cf309c2b6c69de4d12b7a8d6
-generated: "2025-12-03T22:36:34.133388+08:00"
+- name: consul
+  repository: https://helm.releases.hashicorp.com
+  version: 1.9.8
+digest: sha256:94a0cfdbd1b30e8d41595678ca1f0655a09c805a61066affd4deffa62b3d0d37
+generated: "2026-06-23T15:26:20.604468-07:00"

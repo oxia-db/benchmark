@@ -1,0 +1,3 @@
+driver: consul
+config:
+  address: "localhost:8500"
