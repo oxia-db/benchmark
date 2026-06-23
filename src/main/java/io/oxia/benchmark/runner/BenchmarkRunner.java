@@ -34,13 +34,21 @@ public class BenchmarkRunner {
 
     private static final long MAX_LATENCY_MICROS = TimeUnit.SECONDS.toMicros(60);
 
+    // Fine-grained buckets for HdrHistogram-style percentile distribution charts.
+    // Native histograms provide exponential buckets for accurate percentile aggregation across
+    // instances.
+    private static final double[] LATENCY_BUCKETS = {
+        .0001, .00025, .0005, .00075, .001, .0025, .005, .0075, .01, .025, .05, .075, .1, .25, .5, .75,
+        1, 2.5, 5, 7.5, 10, 30
+    };
+
     private static final Histogram opLatency =
             Histogram.builder()
                     .name("kv_op_latency_seconds")
                     .help("Operation latency")
                     .labelNames("driver", "type", "ok")
-                    .classicOnly()
-                    .classicUpperBounds(.0001, .0005, .001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10)
+                    .classicUpperBounds(LATENCY_BUCKETS)
+                    .nativeInitialSchema(5)
                     .register();
 
     private static final Histogram schedDelay =
@@ -48,8 +56,8 @@ public class BenchmarkRunner {
                     .name("kv_scheduling_delay_seconds")
                     .help("Scheduling delay (intended vs actual send time)")
                     .labelNames("driver", "type")
-                    .classicOnly()
-                    .classicUpperBounds(.0001, .0005, .001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10)
+                    .classicUpperBounds(LATENCY_BUCKETS)
+                    .nativeInitialSchema(5)
                     .register();
 
     private final Workload workload;
@@ -66,6 +74,7 @@ public class BenchmarkRunner {
         SequenceGenerator seqGen =
                 SequenceGenerator.create(workload.keyDistribution(), workload.keyspaceSize());
 
+        Duration warmupDuration = workload.warmup();
         Duration duration = workload.duration();
         int parallelism = workload.parallelism();
 
@@ -78,6 +87,7 @@ public class BenchmarkRunner {
         LongAdder totalFailedOps = new LongAdder();
 
         AtomicBoolean running = new AtomicBoolean(true);
+        AtomicBoolean warmingUp = new AtomicBoolean(!warmupDuration.isZero());
 
         List<Thread> workers = new ArrayList<>();
         for (int i = 0; i < parallelism; i++) {
@@ -87,6 +97,7 @@ public class BenchmarkRunner {
                                     generateTraffic(
                                             seqGen,
                                             running,
+                                            warmingUp,
                                             periodWriteHist,
                                             periodReadHist,
                                             totalWriteHist,
@@ -97,6 +108,22 @@ public class BenchmarkRunner {
             worker.setDaemon(true);
             worker.start();
             workers.add(worker);
+        }
+
+        // Warmup phase
+        if (!warmupDuration.isZero()) {
+            log.info().attr("warmup", warmupDuration).log("Warmup started");
+            Thread.sleep(warmupDuration.toMillis());
+
+            // End warmup and reset all histograms so cumulative stats are clean
+            warmingUp.set(false);
+            periodWriteHist.reset();
+            periodReadHist.reset();
+            totalWriteHist.reset();
+            totalReadHist.reset();
+            periodFailedOps.reset();
+            totalFailedOps.reset();
+            log.info("Warmup complete, starting measured run");
         }
 
         long startNanos = System.nanoTime();
@@ -136,6 +163,7 @@ public class BenchmarkRunner {
     private void generateTraffic(
             SequenceGenerator seqGen,
             AtomicBoolean running,
+            AtomicBoolean warmingUp,
             ConcurrentDoubleHistogram periodWriteHist,
             ConcurrentDoubleHistogram periodReadHist,
             ConcurrentDoubleHistogram totalWriteHist,
@@ -152,6 +180,7 @@ public class BenchmarkRunner {
             UniformRateLimiter.sleepUntil(intendedSendTime);
             if (!running.get()) break;
 
+            boolean isWarmup = warmingUp.get();
             long sendTimeNanos = System.nanoTime();
 
             String key = String.format("k-%016d", seqGen.next());
@@ -159,14 +188,19 @@ public class BenchmarkRunner {
             String opType = isRead ? "read" : "write";
             CompletableFuture<Void> future = isRead ? driver.get(key) : driver.put(key, value);
 
-            // Record scheduling delay (intended vs actual send time)
-            long sendDelayMicros =
-                    Math.min(
-                            MAX_LATENCY_MICROS, TimeUnit.NANOSECONDS.toMicros(sendTimeNanos - intendedSendTime));
-            schedDelay.labelValues(driver.name(), opType).observe(sendDelayMicros / 1_000_000.0);
+            if (!isWarmup) {
+                // Record scheduling delay (intended vs actual send time)
+                long sendDelayMicros =
+                        Math.min(
+                                MAX_LATENCY_MICROS,
+                                TimeUnit.NANOSECONDS.toMicros(sendTimeNanos - intendedSendTime));
+                schedDelay.labelValues(driver.name(), opType).observe(sendDelayMicros / 1_000_000.0);
+            }
 
             future.whenComplete(
                     (v, ex) -> {
+                        if (isWarmup) return;
+
                         // End-to-end latency: actual send time to completion
                         long latencyMicros =
                                 Math.min(
