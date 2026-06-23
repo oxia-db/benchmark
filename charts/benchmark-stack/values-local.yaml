@@ -1,0 +1,64 @@
+# Scaled-down values for a local kind/docker-desktop run.
+# Sized to fit alongside other workloads on a small (~8 GiB) single node.
+# Deploy:  helm install bench charts/benchmark-stack -n bench --create-namespace -f charts/benchmark-stack/values-local.yaml
+
+global:
+  security:
+    allowInsecureImages: true
+
+# Small Oxia cluster (system under test)
+oxia-cluster:
+  enabled: true
+  replicationFactor: 3
+  initialShardCount: 4
+  coordinator:
+    cpu: "100m"
+    memory: 128Mi
+  server:
+    replicas: 3
+    cpu: "500m"
+    memory: 512Mi
+    storage: 2Gi
+  image:
+    repository: oxia/oxia
+    tag: 0.16.7
+    pullPolicy: IfNotPresent
+  pprofEnabled: false
+  monitoringEnabled: false
+
+zookeeper:
+  enabled: false
+
+etcd:
+  enabled: false
+
+# Single short write-only smoke workload (~60s) at a modest rate the tiny
+# cluster can sustain, so latency numbers are clean rather than queue-bound.
+workloads:
+  exitWhenFinish: false
+  metadata:
+    serverNum: 3
+  items:
+    - readRatio: 0.0
+      keyspaceSize: 100000
+      keyDistribution: order
+      valueSize: 64
+      targetRate: 5000
+      duration: 60s
+      parallelism: 16
+
+# One small worker pod
+workers:
+  - name: oxia-worker
+    parallelism: 1
+    cpu: "500m"
+    memory: 512Mi
+    # Locally-built arm64 image (kind load); Never = use the loaded image, don't pull.
+    image: oxia/benchmark:local
+    imagePullPolicy: Never
+    driverConfig:
+      driver: oxia
+      config:
+        serviceAddress: "bench:6648"
+        batchLinger: 5ms
+        batchMaxCount: 5000
