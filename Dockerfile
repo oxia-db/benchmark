@@ -12,13 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM eclipse-temurin:17-jdk-alpine AS builder
+# Build the (architecture-independent) jar on the native build platform so the
+# Gradle build never runs under QEMU emulation; only the runtime stage is
+# resolved per target architecture.
+FROM --platform=$BUILDPLATFORM bellsoft/liberica-openjdk-alpine:17 AS builder
 WORKDIR /app
 COPY . .
 RUN ./gradlew shadowJar --no-daemon
 
-FROM eclipse-temurin:17-jre-alpine
+# Run on the latest Java (25). The jar is Java 17 bytecode (per the Gradle
+# toolchain) and runs unchanged on the newer JVM. The flags keep the JDK 25
+# runtime warning-free: Unsafe-memory access (as in bin/oxia-benchmark) plus
+# native access for Netty's loadLibrary.
+FROM bellsoft/liberica-openjre-alpine:25
 WORKDIR /bench
 COPY --from=builder /app/build/libs/*-all.jar /bench/oxia-benchmark.jar
 COPY conf /bench/conf
-ENTRYPOINT ["java", "-jar", "/bench/oxia-benchmark.jar"]
+ENTRYPOINT ["java", \
+    "--add-opens=java.base/java.nio=ALL-UNNAMED", \
+    "--add-opens=jdk.unsupported/sun.misc=ALL-UNNAMED", \
+    "--sun-misc-unsafe-memory-access=allow", \
+    "--enable-native-access=ALL-UNNAMED", \
+    "-jar", "/bench/oxia-benchmark.jar"]
