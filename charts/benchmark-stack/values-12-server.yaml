@@ -1,7 +1,4 @@
 
-global:
-  security:
-    allowInsecureImages: true
 # Oxia cluster configuration
 
 oxia-cluster:
@@ -16,10 +13,6 @@ oxia-cluster:
     cpu: "2"
     memory: 8Gi
     storage: 128Gi
-  image:
-    repository: oxia/oxia
-    tag: 0.15.1
-    pullPolicy: IfNotPresent
   pprofEnabled: true
   monitoringEnabled: true
 
