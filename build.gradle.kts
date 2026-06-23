@@ -65,6 +65,7 @@ dependencies {
     implementation("io.github.oxia-db:oxia-client:0.7.4")
     implementation("io.etcd:jetcd-core:0.8.6")
     implementation("org.apache.zookeeper:zookeeper:3.9.3")
+    implementation("io.lettuce:lettuce-core:6.5.1.RELEASE")
 
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")

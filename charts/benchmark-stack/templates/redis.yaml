@@ -1,0 +1,45 @@
+{{- if .Values.redis.enabled }}
+# Redis single-node, in-memory (no AOF/RDB) — the in-memory "speed ceiling"
+# baseline, a different durability class than the consensus stores by design.
+# Named <release>-redis so the worker's default init-wait target matches.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-redis
+spec:
+  selector:
+    app: {{ .Release.Name }}-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-redis
+spec:
+  serviceName: {{ .Release.Name }}-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-redis
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image | default "redis:7.2-alpine" | quote }}
+          args: ["--appendonly", "no", "--save", ""]
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              cpu: {{ .Values.redis.cpu | default "1" | quote }}
+              memory: {{ .Values.redis.memory | default "2Gi" | quote }}
+            limits:
+              cpu: {{ .Values.redis.cpu | default "1" | quote }}
+              memory: {{ .Values.redis.memory | default "2Gi" | quote }}
+{{- end }}
