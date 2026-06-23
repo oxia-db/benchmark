@@ -17,6 +17,7 @@ package io.oxia.benchmark.driver;
 
 import io.oxia.benchmark.driver.etcd.EtcdDriver;
 import io.oxia.benchmark.driver.oxia.OxiaDriver;
+import io.oxia.benchmark.driver.tikv.TiKVDriver;
 import io.oxia.benchmark.driver.zookeeper.ZooKeeperDriver;
 
 public final class DriverFactory {
@@ -29,6 +30,7 @@ public final class DriverFactory {
                     case "oxia" -> new OxiaDriver();
                     case "etcd" -> new EtcdDriver();
                     case "zookeeper" -> new ZooKeeperDriver();
+                    case "tikv" -> new TiKVDriver();
                     default -> throw new IllegalArgumentException("Unknown driver: " + conf.driver());
                 };
         driver.init(conf.config());
