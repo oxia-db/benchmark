@@ -1,0 +1,16 @@
+# Default values shared by every environment. Helm always loads this file first
+# and merges any -f values file on top, so common settings — notably the Oxia
+# version — live here once instead of being duplicated (and drifting) across the
+# per-environment values-*.yaml files. Override any of these in an env file as
+# needed; note that list values (e.g. workloads, workers) are replaced wholesale,
+# not merged, so those stay in the env files.
+
+global:
+  security:
+    allowInsecureImages: true
+
+oxia-cluster:
+  image:
+    repository: oxia/oxia
+    tag: 0.16.7
+    pullPolicy: IfNotPresent
