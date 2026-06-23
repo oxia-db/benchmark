@@ -66,6 +66,7 @@ dependencies {
     implementation("io.etcd:jetcd-core:0.8.6")
     implementation("org.tikv:tikv-client-java:3.3.5")
     implementation("org.apache.zookeeper:zookeeper:3.9.3")
+    implementation("io.lettuce:lettuce-core:6.5.1.RELEASE")
 
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")

@@ -1,0 +1,3 @@
+driver: redis
+config:
+  address: "localhost:6379"
