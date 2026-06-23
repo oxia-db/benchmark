@@ -15,6 +15,7 @@
  */
 package io.oxia.benchmark.driver;
 
+import io.oxia.benchmark.driver.consul.ConsulDriver;
 import io.oxia.benchmark.driver.etcd.EtcdDriver;
 import io.oxia.benchmark.driver.oxia.OxiaDriver;
 import io.oxia.benchmark.driver.redis.RedisDriver;
@@ -31,6 +32,7 @@ public final class DriverFactory {
                     case "etcd" -> new EtcdDriver();
                     case "zookeeper" -> new ZooKeeperDriver();
                     case "redis" -> new RedisDriver();
+                    case "consul" -> new ConsulDriver();
                     default -> throw new IllegalArgumentException("Unknown driver: " + conf.driver());
                 };
         driver.init(conf.config());

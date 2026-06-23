@@ -1,4 +1,8 @@
 {{- range .Values.workers }}
+{{- $driver := .driverConfig.driver }}
+{{- /* StatefulSet to wait on: explicit waitForStsName wins, else the release name for oxia, else <release>-<driver> */}}
+{{- $stsName := printf "%s-%s" $.Release.Name $driver }}
+{{- if .waitForStsName }}{{ $stsName = printf "%s-%s" $.Release.Name .waitForStsName }}{{ else if eq $driver "oxia" }}{{ $stsName = $.Release.Name }}{{ end }}
 ---
 # Deployment for worker
 apiVersion: apps/v1
@@ -26,12 +30,7 @@ spec:
             - sh
             - -c
             - |
-              if [ "{{ .driverConfig.driver }}" = "oxia" ]; then
-                STS_NAME="{{ $.Release.Name}}"
-              else
-                STS_NAME="{{ $.Release.Name}}-{{ .driverConfig.driver }}"
-              fi
-
+              STS_NAME="{{ $stsName }}"
               echo "Waiting for Target Cluster $STS_NAME to be ready..."
               kubectl wait sts/$STS_NAME \
                 --for=jsonpath='{.status.readyReplicas}'=$(kubectl get sts $STS_NAME -o jsonpath='{.spec.replicas}') \
@@ -42,8 +41,8 @@ spec:
               echo "StatefulSet $STS_NAME is ready!"
       containers:
         - name: {{ $.Release.Name }}-{{ .name }}
-          image: "oxia/benchmark:main"
-          imagePullPolicy: Always
+          image: "{{ .image | default "oxia/benchmark:main" }}"
+          imagePullPolicy: {{ .imagePullPolicy | default "Always" }}
           ports:
             - containerPort: 8080
               name: "metrics"

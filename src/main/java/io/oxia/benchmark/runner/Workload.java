@@ -29,6 +29,7 @@ public class Workload {
     @JsonProperty private int valueSize;
     @JsonProperty private double targetRate;
     @JsonProperty private String duration;
+    @JsonProperty private String warmup;
     @JsonProperty private int parallelism;
 
     public double readRatio() {
@@ -53,6 +54,10 @@ public class Workload {
 
     public Duration duration() {
         return parseDuration(duration);
+    }
+
+    public Duration warmup() {
+        return warmup == null || warmup.isEmpty() ? Duration.ofSeconds(10) : parseDuration(warmup);
     }
 
     public int parallelism() {
@@ -96,8 +101,15 @@ public class Workload {
     public String toString() {
         return String.format(
                 "{readRatio=%.1f, keyspaceSize=%d, keyDistribution=%s, valueSize=%d,"
-                        + " targetRate=%.0f, duration=%s, parallelism=%d}",
-                readRatio, keyspaceSize, keyDistribution, valueSize, targetRate, duration, parallelism);
+                        + " targetRate=%.0f, duration=%s, warmup=%s, parallelism=%d}",
+                readRatio,
+                keyspaceSize,
+                keyDistribution,
+                valueSize,
+                targetRate,
+                duration,
+                warmup(),
+                parallelism);
     }
 
     static Duration parseDuration(String s) {
