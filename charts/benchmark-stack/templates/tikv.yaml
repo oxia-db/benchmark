@@ -1,0 +1,122 @@
+{{- if .Values.tikv.enabled }}
+# Minimal TiKV cluster: 1 PD (placement driver) + N TiKV stores, using the
+# Apache-2.0 PingCAP images directly (no tidb-operator). PD is single-node for
+# simplicity (it is the coordinator/metadata, not the data path). Data dirs are
+# ephemeral (emptyDir) since this is a benchmark target.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-pd
+spec:
+  selector:
+    app: {{ .Release.Name }}-pd
+  ports:
+    - name: client
+      port: 2379
+    - name: peer
+      port: 2380
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-pd
+spec:
+  serviceName: {{ .Release.Name }}-pd
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-pd
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-pd
+    spec:
+      containers:
+        - name: pd
+          image: {{ .Values.tikv.pdImage | default "pingcap/pd:v8.5.1" | quote }}
+          command: ["/pd-server"]
+          args:
+            - "--name=pd0"
+            - "--data-dir=/data"
+            - "--client-urls=http://0.0.0.0:2379"
+            - "--peer-urls=http://0.0.0.0:2380"
+            - "--advertise-client-urls=http://{{ .Release.Name }}-pd:2379"
+            - "--advertise-peer-urls=http://{{ .Release.Name }}-pd:2380"
+            - "--initial-cluster=pd0=http://{{ .Release.Name }}-pd:2380"
+          ports:
+            - containerPort: 2379
+            - containerPort: 2380
+          resources:
+            requests:
+              cpu: {{ .Values.tikv.pd.cpu | default "1" | quote }}
+              memory: {{ .Values.tikv.pd.memory | default "1Gi" | quote }}
+            limits:
+              cpu: {{ .Values.tikv.pd.cpu | default "1" | quote }}
+              memory: {{ .Values.tikv.pd.memory | default "1Gi" | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-tikv-headless
+spec:
+  clusterIP: None
+  selector:
+    app: {{ .Release.Name }}-tikv
+  ports:
+    - name: server
+      port: 20160
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-tikv
+spec:
+  serviceName: {{ .Release.Name }}-tikv-headless
+  replicas: {{ .Values.tikv.replicas | default 3 }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-tikv
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-tikv
+    spec:
+      containers:
+        - name: tikv
+          image: {{ .Values.tikv.image | default "pingcap/tikv:v8.5.1" | quote }}
+          command: ["/tikv-server"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          args:
+            - "--pd-endpoints={{ .Release.Name }}-pd:2379"
+            - "--addr=0.0.0.0:20160"
+            - "--advertise-addr=$(POD_NAME).{{ .Release.Name }}-tikv-headless.{{ .Release.Namespace }}.svc:20160"
+            - "--status-addr=0.0.0.0:20180"
+            - "--data-dir=/data"
+          ports:
+            - containerPort: 20160
+              name: server
+          resources:
+            requests:
+              cpu: {{ .Values.tikv.cpu | default "2" | quote }}
+              memory: {{ .Values.tikv.memory | default "4Gi" | quote }}
+            limits:
+              cpu: {{ .Values.tikv.cpu | default "2" | quote }}
+              memory: {{ .Values.tikv.memory | default "4Gi" | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+{{- end }}

@@ -1,0 +1,58 @@
+# Deploy + benchmark TiKV as the system under test, using the Apache-2.0 PingCAP
+# PD + TiKV images directly (no tidb-operator). A single PD coordinates a 3-node
+# TiKV cluster.
+#
+# Install with release name "benchmark" (the worker pdAddresses below assumes it):
+#   helm install benchmark charts/benchmark-stack -f charts/benchmark-stack/values-tikv.yaml
+
+tikv:
+  enabled: true
+  replicas: 3
+  image: pingcap/tikv:v8.5.1
+  cpu: "2"
+  memory: 4Gi
+  pdImage: pingcap/pd:v8.5.1
+  pd:
+    cpu: "1"
+    memory: 1Gi
+
+workloads:
+  exitWhenFinish: false
+  metadata:
+    serverNum: 3
+  items:
+    # insert-only
+    - readRatio: 0.0
+      keyspaceSize: 1000000
+      keyDistribution: order
+      valueSize: 64
+      targetRate: 20000
+      duration: 5m
+      parallelism: 100
+    # mixed 50/50, zipf
+    - readRatio: 0.5
+      keyspaceSize: 1000000
+      keyDistribution: zipf
+      valueSize: 64
+      targetRate: 20000
+      duration: 5m
+      parallelism: 100
+    # read-only, zipf
+    - readRatio: 1.0
+      keyspaceSize: 1000000
+      keyDistribution: zipf
+      valueSize: 64
+      targetRate: 20000
+      duration: 5m
+      parallelism: 100
+
+workers:
+  - name: tikv-worker
+    parallelism: 1
+    cpu: "2"
+    memory: 4Gi
+    driverConfig:
+      driver: tikv
+      config:
+        pdAddresses: "benchmark-pd:2379"
+        threads: 128

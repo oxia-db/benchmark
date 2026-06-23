@@ -1,0 +1,4 @@
+driver: tikv
+config:
+  pdAddresses: "localhost:2379"
+  threads: 64
