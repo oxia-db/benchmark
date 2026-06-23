@@ -42,8 +42,8 @@ spec:
               echo "StatefulSet $STS_NAME is ready!"
       containers:
         - name: {{ $.Release.Name }}-{{ .name }}
-          image: "oxia/benchmark:main"
-          imagePullPolicy: Always
+          image: "{{ .image | default "oxia/benchmark:main" }}"
+          imagePullPolicy: {{ .imagePullPolicy | default "Always" }}
           ports:
             - containerPort: 8080
               name: "metrics"

@@ -1,0 +1,295 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Total throughput aggregated across all load-generator instances.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "editorMode": "code",
+          "expr": "sum by (type, ok) (rate(kv_op_latency_seconds_count{driver=~\"$driver\"}[$__rate_interval]))",
+          "legendFormat": "{{type}} / ok={{ok}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Throughput (ops/s, aggregated)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "End-to-end latency percentiles aggregated across instances.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "histogram_quantile(0.50, sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\"}[$__rate_interval])))", "legendFormat": "p50 {{type}}", "range": true, "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "histogram_quantile(0.95, sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\"}[$__rate_interval])))", "legendFormat": "p95 {{type}}", "range": true, "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "histogram_quantile(0.99, sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\"}[$__rate_interval])))", "legendFormat": "p99 {{type}}", "range": true, "refId": "C"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "histogram_quantile(0.999, sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\"}[$__rate_interval])))", "legendFormat": "p99.9 {{type}}", "range": true, "refId": "D"}
+      ],
+      "title": "Latency percentiles over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Latency distribution heatmap — color represents the density of operations at each latency value over time. Aggregated across all instances.",
+      "fieldConfig": {
+        "defaults": {"custom": {"scaleDistribution": {"type": "linear"}}}
+      },
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 9},
+      "id": 3,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Spectral",
+          "steps": 64
+        },
+        "exemplars": {"color": "rgba(255,0,255,0.7)"},
+        "filterValues": {"le": 1e-9},
+        "legend": {"show": true},
+        "rowsFrame": {"layout": "auto"},
+        "tooltip": {"mode": "single", "showColorScale": false, "yHistogram": true},
+        "yAxis": {"axisPlacement": "left", "reverse": false, "unit": "s"}
+      },
+      "pluginVersion": "11.5.0",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "editorMode": "code",
+          "expr": "sum by (le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__rate_interval]))",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Latency distribution heatmap",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "HdrHistogram-style percentile distribution across the selected time range. X axis is the percentile; Y axis is latency at that percentile. Aggregated across all instances.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisGridShow": true,
+            "axisPlacement": "auto",
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "pointSize": 6,
+            "scaleDistribution": {"type": "log", "log": 10},
+            "show": "lines+points"
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 19},
+      "id": 4,
+      "options": {
+        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true},
+        "mapping": "auto",
+        "series": [
+          {
+            "x": {"matcher": {"id": "byName", "options": "p"}},
+            "y": {"matcher": {"id": "byName", "options": "Value"}}
+          }
+        ],
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "pluginVersion": "11.5.0",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "editorMode": "code",
+          "expr": "label_replace(histogram_quantile(0.50,    sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__range]))), \"p\", \"0.50\",    \"type\", \".*\")\nor label_replace(histogram_quantile(0.75,    sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__range]))), \"p\", \"0.75\",    \"type\", \".*\")\nor label_replace(histogram_quantile(0.90,    sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__range]))), \"p\", \"0.90\",    \"type\", \".*\")\nor label_replace(histogram_quantile(0.99,    sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__range]))), \"p\", \"0.99\",    \"type\", \".*\")\nor label_replace(histogram_quantile(0.999,   sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__range]))), \"p\", \"0.999\",   \"type\", \".*\")\nor label_replace(histogram_quantile(0.9999,  sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__range]))), \"p\", \"0.9999\",  \"type\", \".*\")\nor label_replace(histogram_quantile(0.99999, sum by (type, le) (rate(kv_op_latency_seconds_bucket{driver=~\"$driver\", ok=\"true\", type=~\"$op_type\"}[$__range]))), \"p\", \"0.99999\", \"type\", \".*\")",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{type}}",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [{"destinationType": "number", "targetField": "p"}],
+            "fields": {}
+          }
+        },
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": ["type"],
+            "keepFields": false,
+            "naming": {"asLabels": false}
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true, "__name__": true, "driver": true, "instance_id": true, "job": true, "instance": true, "ok": true}
+          }
+        }
+      ],
+      "title": "Percentile distribution (HdrHistogram-style, current time range)",
+      "type": "xychart"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Scheduling delay — how far behind the intended send time the worker actually sent. Spikes indicate load-generator CPU contention or GC pauses, not server-side latency.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 31},
+      "id": 5,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "histogram_quantile(0.50, sum by (type, le) (rate(kv_scheduling_delay_seconds_bucket{driver=~\"$driver\"}[$__rate_interval])))", "legendFormat": "p50 {{type}}", "range": true, "refId": "A"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "histogram_quantile(0.99, sum by (type, le) (rate(kv_scheduling_delay_seconds_bucket{driver=~\"$driver\"}[$__rate_interval])))", "legendFormat": "p99 {{type}}", "range": true, "refId": "B"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "histogram_quantile(0.999, sum by (type, le) (rate(kv_scheduling_delay_seconds_bucket{driver=~\"$driver\"}[$__rate_interval])))", "legendFormat": "p99.9 {{type}}", "range": true, "refId": "C"}
+      ],
+      "title": "Scheduling delay percentiles",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["oxia", "benchmark"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": false, "text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(kv_op_latency_seconds_count, driver)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "driver",
+        "options": [],
+        "query": {"query": "label_values(kv_op_latency_seconds_count, driver)", "refId": "StandardVariableQuery"},
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {"selected": false, "text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(kv_op_latency_seconds_count, type)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "op_type",
+        "label": "op type",
+        "options": [],
+        "query": {"query": "label_values(kv_op_latency_seconds_count, type)", "refId": "StandardVariableQuery"},
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "Oxia Benchmark",
+  "uid": "oxia-benchmark",
+  "version": 1,
+  "weekStart": ""
+}
