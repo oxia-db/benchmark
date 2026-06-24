@@ -2,8 +2,9 @@ exitWhenFinish: false
 metadata:
   serverNum: 1
 items:
-  # insert-only
-  - readRatio: 0.0
+  - name: insert-only
+    description: 100% writes, sequential keys
+    readRatio: 0.0
     keyspaceSize: 100000    # 100k keys
     keyDistribution: order
     valueSize: 64
