@@ -93,14 +93,16 @@ spec:
           image: {{ .Values.tikv.image | default "pingcap/tikv:v8.5.1" | quote }}
           command: ["/tikv-server"]
           env:
-            - name: POD_NAME
+            # Advertise the pod IP: the headless service's per-pod DNS is unreliable here
+            # (empty endpoints), so the client (via PD) gets a directly-routable address.
+            - name: POD_IP
               valueFrom:
                 fieldRef:
-                  fieldPath: metadata.name
+                  fieldPath: status.podIP
           args:
             - "--pd-endpoints={{ .Release.Name }}-pd:2379"
             - "--addr=0.0.0.0:20160"
-            - "--advertise-addr=$(POD_NAME).{{ .Release.Name }}-tikv-headless.{{ .Release.Namespace }}.svc:20160"
+            - "--advertise-addr=$(POD_IP):20160"
             - "--status-addr=0.0.0.0:20180"
             - "--data-dir=/data"
           ports:
