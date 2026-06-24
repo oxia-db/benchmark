@@ -6,7 +6,8 @@
 #
 # Usage:  scripts/run-comparison.sh [backend ...]      (default: all six)
 # Env:    KUBE_CONTEXT=kind-matteo  NS=bench  IMAGE=oxia/benchmark:local
-#         RESULTS=comparison-results  OUT=comparison-report  PER_BACKEND_TIMEOUT=600
+#         WORKLOADS=conf/workload-comparison.yaml  RESULTS=comparison-results
+#         OUT=comparison-report  PER_BACKEND_TIMEOUT=600
 #
 # Prereqs: the worker image is built and loaded into the cluster, and the report
 # jar is built (./gradlew shadowJar). See README "Cross-driver comparison".
@@ -17,6 +18,7 @@ CHART="charts/benchmark-stack"
 CTX="${KUBE_CONTEXT:-kind-matteo}"
 NS="${NS:-bench}"
 IMAGE="${IMAGE:-oxia/benchmark:local}"
+WORKLOADS="${WORKLOADS:-conf/workload-comparison.yaml}"
 RESULTS="${RESULTS:-comparison-results}"
 OUT="${OUT:-comparison-report}"
 PER_BACKEND_TIMEOUT="${PER_BACKEND_TIMEOUT:-600}"
@@ -60,7 +62,7 @@ for backend in "${BACKENDS[@]}"; do
   echo "==================== $backend (release $release) ===================="
   if ! hl install "$release" "$CHART" --create-namespace \
         -f "$CHART/comparison/$backend.yaml" \
-        -f "$CHART/comparison/workloads.yaml" \
+        --set-file "workloadsYaml=$WORKLOADS" \
         --set "workers[0].image=$IMAGE" \
         --set "workers[0].imagePullPolicy=Never" \
         --set "workers[0].memory=${WORKER_MEM:-896Mi}" >/dev/null 2>&1; then
