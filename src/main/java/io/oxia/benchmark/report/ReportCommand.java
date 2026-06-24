@@ -121,6 +121,8 @@ public class ReportCommand implements Callable<Integer> {
         WorkloadResult first = group.get(0);
         Summary s = new Summary();
         s.index = first.index;
+        s.name = first.name;
+        s.description = first.description;
         s.driver = first.driver;
         s.workers = group.size();
         s.readRatio = first.readRatio;
@@ -181,18 +183,20 @@ public class ReportCommand implements Callable<Integer> {
     private void writeCsv(List<Summary> summaries) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append(
-                "index,driver,workers,readRatio,keyspaceSize,keyDistribution,valueSize,targetRate,"
-                        + "parallelism,measuredSeconds,failed,write_ops_s,write_p50_ms,write_p95_ms,write_p99_ms,"
-                        + "write_p999_ms,write_max_ms,read_ops_s,read_p50_ms,read_p95_ms,read_p99_ms,"
+                "index,name,description,driver,workers,readRatio,keyspaceSize,keyDistribution,valueSize,"
+                        + "targetRate,parallelism,measuredSeconds,failed,write_ops_s,write_p50_ms,write_p95_ms,"
+                        + "write_p99_ms,write_p999_ms,write_max_ms,read_ops_s,read_p50_ms,read_p95_ms,read_p99_ms,"
                         + "read_p999_ms,read_max_ms\n");
         for (Summary s : summaries) {
             sb.append(
                     String.format(
                             Locale.ROOT,
-                            "%d,%s,%d,%.2f,%d,%s,%d,%.0f,%d,%.1f,%d,"
+                            "%d,%s,%s,%s,%d,%.2f,%d,%s,%d,%.0f,%d,%.1f,%d,"
                                     + "%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,"
                                     + "%.1f,%.3f,%.3f,%.3f,%.3f,%.3f%n",
                             s.index,
+                            csv(s.name),
+                            csv(s.description),
                             s.driver,
                             s.workers,
                             s.readRatio,
@@ -217,6 +221,17 @@ public class ReportCommand implements Callable<Integer> {
                             s.read.max));
         }
         Files.writeString(outDir.resolve("summary.csv"), sb.toString());
+    }
+
+    /** RFC-4180 CSV field: quote (and double inner quotes) only when the value needs it. */
+    private static String csv(String v) {
+        if (v == null) {
+            return "";
+        }
+        if (v.contains(",") || v.contains("\"") || v.contains("\n")) {
+            return "\"" + v.replace("\"", "\"\"") + "\"";
+        }
+        return v;
     }
 
     private void writeHtml(List<Summary> summaries) throws IOException {
@@ -260,6 +275,8 @@ public class ReportCommand implements Callable<Integer> {
     /** Aggregated metrics for one workload across all workers. */
     public static class Summary {
         public int index;
+        public String name;
+        public String description;
         public String driver;
         public int workers;
         public double readRatio;

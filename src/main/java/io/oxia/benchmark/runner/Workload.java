@@ -23,6 +23,8 @@ public class Workload {
 
     private static final Set<String> VALID_DISTRIBUTIONS = Set.of("uniform", "zipf", "order");
 
+    @JsonProperty private String name; // optional human label, surfaced in results and the report
+    @JsonProperty private String description; // optional longer note, surfaced in the report
     @JsonProperty private double readRatio;
     @JsonProperty private long keyspaceSize;
     @JsonProperty private String keyDistribution;
@@ -31,6 +33,14 @@ public class Workload {
     @JsonProperty private String duration;
     @JsonProperty private String warmup;
     @JsonProperty private int parallelism;
+
+    public String name() {
+        return name;
+    }
+
+    public String description() {
+        return description;
+    }
 
     public double readRatio() {
         return readRatio;

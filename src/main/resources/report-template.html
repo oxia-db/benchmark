@@ -40,7 +40,8 @@ const indices = Object.keys(byWorkload).map(Number).sort((a, b) => a - b);
 const drivers = [...new Set(DATA.map(d => d.driver))].sort();
 const color = {}; drivers.forEach((dr, i) => color[dr] = PALETTE[i % PALETTE.length]);
 
-const wlabel = (d) => `#${d.index} ${d.keyDistribution} r=${d.readRatio}`;
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const wlabel = (d) => d.name ? `#${d.index} ${d.name}` : `#${d.index} ${d.keyDistribution} r=${d.readRatio}`;
 const labels = indices.map(i => wlabel(byWorkload[i][0]));
 
 const pctAxis = {
@@ -76,7 +77,9 @@ indices.forEach(idx => {
   const w = rows[0];
   const sec = document.createElement('div');
   sec.className = 'card';
-  let html = `<h2>Workload #${idx} — ${w.keyDistribution}, readRatio ${w.readRatio}, ${w.valueSize}B value, target ${w.targetRate}/s, parallelism ${w.parallelism}</h2>`;
+  let html = `<h2>Workload #${idx}${w.name ? ' — ' + esc(w.name) : ''}</h2>`;
+  if (w.description) html += `<p class="sub" style="margin:.25rem 0 .5rem">${esc(w.description)}</p>`;
+  html += `<p class="sub" style="margin:0 0 .75rem">${w.keyDistribution}, readRatio ${w.readRatio}, ${w.valueSize}B value, target ${w.targetRate}/s, parallelism ${w.parallelism}</p>`;
   html += `<canvas id="pct-${idx}"></canvas><div class="wrap"><table>`;
   html += '<tr><th class="l">driver</th><th>workers</th><th>w ops/s</th><th>w p50</th><th>w p99</th><th>w p99.9</th><th>w max</th><th>r ops/s</th><th>r p50</th><th>r p99</th><th>r p99.9</th><th>r max</th><th>failed</th></tr>';
   rows.forEach(r => {

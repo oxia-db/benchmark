@@ -15,16 +15,23 @@
  */
 package io.oxia.benchmark.report;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * One worker's measured result for a single workload. The latency distributions are stored as
  * base64-encoded, compressed HdrHistograms so the report step can merge them across workers for
  * exact aggregated percentiles (averaging per-worker percentiles is not valid). Serialized as one
- * JSON line per (worker, workload); public fields keep Jackson mapping trivial.
+ * JSON line per (worker, workload); public fields keep Jackson mapping trivial. Unknown fields are
+ * ignored so a newer worker's result still parses with an older report tool (and vice versa).
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class WorkloadResult {
 
     public int index; // workload position in the run
     public String instanceId; // worker / pod identifier
+
+    public String name; // optional workload label from config
+    public String description; // optional workload description from config
 
     public String driver;
     public double readRatio;
