@@ -51,6 +51,14 @@ public class TiKVDriver implements KVStoreDriver {
         int threads = config.containsKey("threads") ? ((Number) config.get("threads")).intValue() : 64;
 
         TiConfiguration conf = TiConfiguration.createRawDefault(pdAddresses);
+        // The client defaults (200ms per-RPC deadline, 2s raw-op budget) are too tight for a
+        // resource-constrained single-node store (e.g. on kind): slow responses trip
+        // DEADLINE_EXCEEDED and the operation fails with "retry is exhausted". Generous timeouts
+        // let it complete; on a healthy cluster responses are sub-millisecond so these never bite.
+        conf.setTimeout(5000);
+        conf.setForwardTimeout(5000);
+        conf.setRawKVReadTimeoutInMS(10000);
+        conf.setRawKVWriteTimeoutInMS(10000);
         session = TiSession.create(conf);
         client = session.createRawClient();
         executor = Executors.newFixedThreadPool(threads);

@@ -1,12 +1,17 @@
 # TiKV: 1 PD + 1 TiKV store (raw PingCAP images), scaled for kind. 3 worker pods.
-# NOTE: these manifests have not been validated end-to-end; on arm64 the PingCAP
-# images may be unavailable. The orchestration skips a backend that fails to come up.
+# Validated end-to-end on kind/arm64 (store serves, worker completes, results gathered).
+# Caveat: a single-node store is by far the slowest backend here and saturates well below
+# the shared target rate, so its latencies are dominated by queueing; the store also needs
+# ~2Gi, so on a node already running other namespaces it may not fit alongside 3 workers.
+# The orchestration skips a backend that fails to come up.
 tikv:
   enabled: true
   replicas: 1
   image: pingcap/tikv:v8.5.1
-  cpu: "500m"
-  memory: 1Gi
+  # TiKV is memory-hungry (RocksDB block cache + memtables + raft engine); it OOMKills below ~2Gi.
+  # It is also CPU-sensitive: at 1 CPU the store responds too slowly and raw RPCs time out.
+  cpu: "2"
+  memory: 2Gi
   pdImage: pingcap/pd:v8.5.1
   pd:
     cpu: "250m"
