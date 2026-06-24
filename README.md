@@ -93,6 +93,37 @@ To clean up build artifacts:
 make clean
 ```
 
+### Collecting and reporting results
+
+Pass `--results-dir <dir>` to write a per-workload result file for each worker — one JSON line per
+workload, with the latency distribution serialized as a compressed HdrHistogram:
+
+```bash
+java -jar build/libs/oxia-benchmark-*-all.jar \
+  --driver-config conf/driver-oxia.yaml --workloads conf/workload-mixed.yaml \
+  --results-dir results --instance-id "$(hostname)"
+```
+
+Then aggregate the results into per-workload metrics — merging the histograms across all workers for
+**exact** percentiles (averaging per-worker percentiles is not statistically valid) — and render a
+report:
+
+```bash
+java -jar build/libs/oxia-benchmark-*-all.jar report --results-dir results --out report
+```
+
+This writes three files to `report/`:
+
+- `summary.csv` and `summary.json` — the raw per-workload metrics (throughput, p50/p95/p99/p99.9/max
+  for reads and writes, failures), for building your own charts.
+- `report.html` — a self-contained chart of throughput, latency percentiles, and the
+  HdrHistogram-style latency-by-percentile distribution per workload.
+- `workload-<i>-<write|read>.hgrm` — HdrHistogram percentile-distribution files, for the official
+  plotter at <https://hdrhistogram.github.io/HdrHistogram/>.
+
+For a distributed run, gather every worker's `*.jsonl` file into a single directory (e.g. via a
+shared volume or `kubectl cp`) before running `report`.
+
 ## Kubernetes Deployment
 
 The `charts` directory contains a Helm chart for deploying the benchmark to a Kubernetes cluster. The `benchmark-stack` chart deploys the entire benchmark environment: the systems under test (see [Supported Backends](#supported-backends)) and the benchmark workers that generate load against them.
