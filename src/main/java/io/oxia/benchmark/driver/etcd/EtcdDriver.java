@@ -21,7 +21,6 @@ import io.etcd.jetcd.KV;
 import io.oxia.benchmark.driver.KVStoreDriver;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -59,19 +58,13 @@ public class EtcdDriver implements KVStoreDriver {
                     "Invalid type for 'endpoints': " + endpointsObj.getClass());
         }
 
-        Duration timeout = Duration.ofSeconds(5);
-        if (config.containsKey("dialTimeout")) {
-            Object t = config.get("dialTimeout");
-            if (t instanceof String s) {
-                timeout = parseDuration(s);
-            } else if (t instanceof Number n) {
-                timeout = Duration.ofSeconds(n.longValue());
-            }
-        }
-
         String[] targets = endpoints.stream().map(e -> "http://" + e).toArray(String[]::new);
 
-        client = Client.builder().endpoints(targets).connectTimeout(timeout).build();
+        // connectTimeout is intentionally omitted: tikv-client-java bundles an older, unrelocated
+        // io.etcd.jetcd, and the shaded jar may load that ClientBuilder (which lacks
+        // connectTimeout). Using only jetcd's stable core builder API keeps the etcd driver robust
+        // to whichever copy wins. (dialTimeout config is currently ignored as a result.)
+        client = Client.builder().endpoints(targets).build();
         kvClient = client.getKVClient();
     }
 
@@ -95,15 +88,5 @@ public class EtcdDriver implements KVStoreDriver {
         if (client != null) {
             client.close();
         }
-    }
-
-    private static Duration parseDuration(String s) {
-        if (s.endsWith("ms")) {
-            return Duration.ofMillis(Long.parseLong(s.substring(0, s.length() - 2)));
-        }
-        if (s.endsWith("s")) {
-            return Duration.ofSeconds(Long.parseLong(s.substring(0, s.length() - 1)));
-        }
-        return Duration.parse("PT" + s);
     }
 }

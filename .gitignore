@@ -40,3 +40,7 @@ hs_err_pid*
 
 # Helm
 *.tgz
+
+# Cross-driver comparison run output
+comparison-results/
+comparison-report/
