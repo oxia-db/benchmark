@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Oxia Benchmark — Workload Report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; line-height: 1.4; }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+  p.sub { color: #888; margin: 0 0 1.5rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  .card { border: 1px solid #8884; border-radius: 10px; padding: 1rem; }
+  canvas { max-height: 360px; }
+  table { border-collapse: collapse; width: 100%; font-size: .85rem; margin-top: 1.5rem; }
+  th, td { border: 1px solid #8884; padding: 4px 8px; text-align: right; white-space: nowrap; }
+  th { background: #8881; position: sticky; top: 0; }
+  td.l, th.l { text-align: left; }
+  .wrap { overflow-x: auto; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Oxia Benchmark — Workload Report</h1>
+<p class="sub">Per-workload metrics, aggregated across all workers (exact, HdrHistogram-merged). Latencies in ms.</p>
+
+<div class="grid">
+  <div class="card"><canvas id="throughput"></canvas></div>
+  <div class="card"><canvas id="latency"></canvas></div>
+</div>
+
+<div class="wrap"><table id="raw"></table></div>
+
+<script>
+const DATA = /*__DATA__*/;
+
+const labels = DATA.map(d => `#${d.index} ${d.driver} ${d.keyDistribution} r=${d.readRatio}`);
+const css = getComputedStyle(document.body);
+const fg = css.color;
+Chart.defaults.color = fg;
+Chart.defaults.borderColor = '#8883';
+
+new Chart(document.getElementById('throughput'), {
+  type: 'bar',
+  data: { labels, datasets: [
+    { label: 'write ops/s', data: DATA.map(d => d.write.opsPerSec), backgroundColor: '#378ADD' },
+    { label: 'read ops/s',  data: DATA.map(d => d.read.opsPerSec),  backgroundColor: '#1D9E75' },
+  ]},
+  options: { plugins: { title: { display: true, text: 'Throughput (ops/s)' } },
+             responsive: true, scales: { y: { beginAtZero: true } } }
+});
+
+const hasReads = DATA.some(d => d.read.count > 0);
+const latDatasets = [
+  { label: 'write p50', data: DATA.map(d => d.write.p50), backgroundColor: '#B5D4F4' },
+  { label: 'write p99', data: DATA.map(d => d.write.p99), backgroundColor: '#378ADD' },
+  { label: 'write p99.9', data: DATA.map(d => d.write.p999), backgroundColor: '#0C447C' },
+];
+if (hasReads) latDatasets.push(
+  { label: 'read p50', data: DATA.map(d => d.read.p50), backgroundColor: '#9FE1CB' },
+  { label: 'read p99', data: DATA.map(d => d.read.p99), backgroundColor: '#1D9E75' },
+  { label: 'read p99.9', data: DATA.map(d => d.read.p999), backgroundColor: '#085041' });
+
+new Chart(document.getElementById('latency'), {
+  type: 'bar',
+  data: { labels, datasets: latDatasets },
+  options: { plugins: { title: { display: true, text: 'Latency percentiles (ms)' } },
+             responsive: true, scales: { y: { beginAtZero: true, title: { display: true, text: 'ms' } } } }
+});
+
+const cols = [
+  ['index','#'], ['driver','driver'], ['workers','workers'], ['readRatio','readRatio'],
+  ['keyDistribution','dist'], ['valueSize','valueB'], ['targetRate','target/s'],
+  ['parallelism','par'], ['measuredSeconds','secs'], ['failed','failed'],
+];
+const stat = [['opsPerSec','ops/s',0],['p50','p50',3],['p99','p99',3],['p999','p99.9',3],['max','max',3]];
+const t = document.getElementById('raw');
+let head = '<tr>' + cols.map(c => `<th class="l">${c[1]}</th>`).join('');
+for (const side of ['write','read']) head += stat.map(s => `<th>${side[0]}.${s[1]}</th>`).join('');
+head += '</tr>';
+let rows = DATA.map(d => {
+  let r = '<tr>' + cols.map(c => `<td class="l">${d[c[0]]}</td>`).join('');
+  for (const side of ['write','read']) r += stat.map(s => `<td>${(d[side][s[0]]).toFixed(s[2])}</td>`).join('');
+  return r + '</tr>';
+}).join('');
+t.innerHTML = head + rows;
+</script>
+</body>
+</html>

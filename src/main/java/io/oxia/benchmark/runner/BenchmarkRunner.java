@@ -16,6 +16,8 @@
 package io.oxia.benchmark.runner;
 
 import io.oxia.benchmark.driver.KVStoreDriver;
+import io.oxia.benchmark.report.HistogramCodec;
+import io.oxia.benchmark.report.WorkloadResult;
 import io.oxia.benchmark.runner.sequence.SequenceGenerator;
 import io.prometheus.metrics.core.metrics.Histogram;
 import java.time.Duration;
@@ -68,7 +70,7 @@ public class BenchmarkRunner {
         this.driver = driver;
     }
 
-    public void run() throws InterruptedException {
+    public WorkloadResult run() throws InterruptedException {
         log.info().attr("workload", workload).log("Running workload");
 
         SequenceGenerator seqGen =
@@ -152,12 +154,35 @@ public class BenchmarkRunner {
             worker.join(5000);
         }
 
+        long elapsedNanos = System.nanoTime() - startNanos;
         log.info("Cumulative write/read latencies");
-        printStats(
-                totalWriteHist,
-                totalReadHist,
-                totalFailedOps,
-                Duration.ofNanos(System.nanoTime() - startNanos));
+        printStats(totalWriteHist, totalReadHist, totalFailedOps, Duration.ofNanos(elapsedNanos));
+
+        return buildResult(
+                elapsedNanos / 1_000_000_000.0, totalWriteHist, totalReadHist, totalFailedOps);
+    }
+
+    private WorkloadResult buildResult(
+            double measuredSeconds,
+            ConcurrentDoubleHistogram writeHist,
+            ConcurrentDoubleHistogram readHist,
+            LongAdder failedOps) {
+        WorkloadResult r = new WorkloadResult();
+        r.driver = driver.name();
+        r.readRatio = workload.readRatio();
+        r.keyspaceSize = workload.keyspaceSize();
+        r.keyDistribution = workload.keyDistribution();
+        r.valueSize = workload.valueSize();
+        r.targetRate = workload.targetRate();
+        r.parallelism = workload.parallelism();
+        r.duration = workload.duration().toString();
+        r.measuredSeconds = measuredSeconds;
+        r.writeCount = writeHist.getTotalCount();
+        r.readCount = readHist.getTotalCount();
+        r.failedCount = failedOps.sum();
+        r.writeHistB64 = HistogramCodec.encode(writeHist);
+        r.readHistB64 = HistogramCodec.encode(readHist);
+        return r;
     }
 
     private void generateTraffic(

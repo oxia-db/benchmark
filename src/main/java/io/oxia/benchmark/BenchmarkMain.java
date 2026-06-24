@@ -15,14 +15,21 @@
  */
 package io.oxia.benchmark;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oxia.benchmark.driver.DriverConfig;
 import io.oxia.benchmark.driver.DriverFactory;
 import io.oxia.benchmark.driver.KVStoreDriver;
+import io.oxia.benchmark.report.ReportCommand;
+import io.oxia.benchmark.report.WorkloadResult;
 import io.oxia.benchmark.runner.BenchmarkRunner;
 import io.oxia.benchmark.runner.Workload;
 import io.oxia.benchmark.runner.Workloads;
 import io.prometheus.metrics.exporter.httpserver.HTTPServer;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.concurrent.Callable;
 import lombok.CustomLog;
 import picocli.CommandLine;
@@ -33,13 +40,16 @@ import picocli.CommandLine.Option;
 @Command(
         name = "oxia-benchmark",
         mixinStandardHelpOptions = true,
-        description = "Distributed KV load generator")
+        description = "Distributed KV load generator",
+        subcommands = {ReportCommand.class})
 public class BenchmarkMain implements Callable<Integer> {
 
-    @Option(names = "--driver-config", required = true, description = "Path to driver config YAML")
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    @Option(names = "--driver-config", description = "Path to driver config YAML")
     private Path driverConfigPath;
 
-    @Option(names = "--workloads", required = true, description = "Path to workload YAML")
+    @Option(names = "--workloads", description = "Path to workload YAML")
     private Path workloadsPath;
 
     @Option(
@@ -48,8 +58,22 @@ public class BenchmarkMain implements Callable<Integer> {
             description = "Metrics service bind address (default: ${DEFAULT-VALUE})")
     private String metricsAddr;
 
+    @Option(
+            names = "--results-dir",
+            description = "Directory to write per-workload result files (enables the report pipeline)")
+    private Path resultsDir;
+
+    @Option(
+            names = "--instance-id",
+            description = "This worker's id in aggregated reports (default: $HOSTNAME or hostname)")
+    private String instanceId;
+
     @Override
     public Integer call() {
+        if (driverConfigPath == null || workloadsPath == null) {
+            log.error("--driver-config and --workloads are required to run a benchmark");
+            return 2;
+        }
         try {
             // Start Prometheus metrics server
             String[] parts = metricsAddr.split(":");
@@ -63,6 +87,8 @@ public class BenchmarkMain implements Callable<Integer> {
             Workloads wls = Workloads.load(workloadsPath);
             log.info("Loaded workloads configuration");
 
+            String iid = resultsDir != null ? instanceId() : null;
+
             try (KVStoreDriver driver = DriverFactory.build(driverConf)) {
                 for (int i = 0; i < wls.items().size(); i++) {
                     Workload workload = wls.items().get(i);
@@ -72,8 +98,13 @@ public class BenchmarkMain implements Callable<Integer> {
                     int maxRetries = 5;
                     for (int attempt = 0; attempt < maxRetries && !success; attempt++) {
                         try {
-                            new BenchmarkRunner(workload, driver).run();
+                            WorkloadResult result = new BenchmarkRunner(workload, driver).run();
                             success = true;
+                            if (resultsDir != null) {
+                                result.index = i;
+                                result.instanceId = iid;
+                                writeResult(result);
+                            }
                         } catch (Exception e) {
                             log.error()
                                     .attr("attempt", attempt + 1)
@@ -100,6 +131,31 @@ public class BenchmarkMain implements Callable<Integer> {
         } catch (Exception e) {
             log.error().exception(e).log("Benchmark failed");
             return 1;
+        }
+    }
+
+    private void writeResult(WorkloadResult r) throws IOException {
+        Files.createDirectories(resultsDir);
+        String line = JSON.writeValueAsString(r) + System.lineSeparator();
+        Files.writeString(
+                resultsDir.resolve(r.instanceId + ".jsonl"),
+                line,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.APPEND);
+    }
+
+    private String instanceId() {
+        if (instanceId != null && !instanceId.isEmpty()) {
+            return instanceId;
+        }
+        String env = System.getenv("HOSTNAME");
+        if (env != null && !env.isEmpty()) {
+            return env;
+        }
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        } catch (Exception e) {
+            return "worker";
         }
     }
 
