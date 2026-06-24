@@ -6,7 +6,7 @@ distributed runs where multiple load-generator instances each expose their own
 
 ## Quick start
 
-1. Start one or more benchmark clients, each on a different `-m` port:
+1. Start one or more benchmark clients — using any [supported backend](../README.md#supported-backends) — each on a different `-m` port:
 
    ```
    bin/oxia-benchmark --driver-config conf/driver-oxia.yaml \
