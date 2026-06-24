@@ -1,6 +1,6 @@
 # Oxia Benchmark
 
-Oxia Benchmark is a versatile and extensible framework for benchmarking distributed key-value stores. It is designed to facilitate performance comparisons between systems like [Oxia](https://github.com/oxia-db/oxia), [etcd](https://etcd.io/), and [Apache ZooKeeper](https://zookeeper.apache.org/).
+Oxia Benchmark is a versatile and extensible framework for benchmarking distributed key-value stores. It is designed to facilitate performance comparisons between systems like [Oxia](https://github.com/oxia-db/oxia), [etcd](https://etcd.io/), [Apache ZooKeeper](https://zookeeper.apache.org/), [Consul](https://www.consul.io/), [Redis](https://redis.io/), and [TiKV](https://tikv.org/).
 
 ## Features
 
@@ -12,6 +12,21 @@ Oxia Benchmark is a versatile and extensible framework for benchmarking distribu
 - **Kubernetes-Native Deployment:** Deploy the complete benchmark environment — including the systems under test — using Helm charts with pre-configured cluster topologies (3, 6, 12 servers).
 - **Prometheus Metrics:** Monitor benchmark performance in real-time via the built-in Prometheus exporter, with per-operation latency histograms labeled by driver, operation type, and success/failure.
 - **Rate-Limited Traffic Generation:** Per-worker token bucket rate limiting ensures precise control over target throughput, independent of system response times.
+
+## Supported Backends
+
+The benchmark drives each system through a common `KVStoreDriver` interface, selected via a driver config in `conf/` and deployable via the Helm chart:
+
+| Backend | Type | Driver config | Java client |
+|---------|------|---------------|-------------|
+| [Oxia](https://github.com/oxia-db/oxia) | Scalable metadata store (sharded, replicated) | `conf/driver-oxia.yaml` | `oxia-client` |
+| [etcd](https://etcd.io/) | Distributed KV / coordination (Raft) | `conf/driver-etcd.yaml` | `jetcd` |
+| [Apache ZooKeeper](https://zookeeper.apache.org/) | Coordination service (ZAB) | `conf/driver-zookeeper.yaml` | `zookeeper` |
+| [Consul](https://www.consul.io/) | KV store (HTTP API) | `conf/driver-consul.yaml` | JDK `HttpClient` |
+| [Redis](https://redis.io/) | In-memory KV (speed-ceiling baseline) | `conf/driver-redis.yaml` | `lettuce` |
+| [TiKV](https://tikv.org/) | Distributed transactional KV (Raft + PD) | `conf/driver-tikv.yaml` | `tikv-client-java` |
+
+Add a new backend by implementing the `KVStoreDriver` interface — see [Extending the Benchmark](#extending-the-benchmark).
 
 ## Getting Started
 
@@ -80,7 +95,7 @@ make clean
 
 ## Kubernetes Deployment
 
-The `charts` directory contains a Helm chart for deploying the benchmark to a Kubernetes cluster. The `benchmark-stack` chart deploys the entire benchmark environment: the systems under test (Oxia, etcd, ZooKeeper) and the benchmark workers that generate load against them.
+The `charts` directory contains a Helm chart for deploying the benchmark to a Kubernetes cluster. The `benchmark-stack` chart deploys the entire benchmark environment: the systems under test (see [Supported Backends](#supported-backends)) and the benchmark workers that generate load against them.
 
 ### Architecture
 
@@ -99,6 +114,7 @@ The chart is configured using values files. There are several pre-configured val
 - `values-6-server.yaml`: Deploys a 6-server cluster of each system.
 - `values-12-server.yaml`: Deploys a 12-server cluster of each system.
 - `values-3-server-latency.yaml`: Deploys a 3-server cluster of each system and configures the benchmark for latency testing.
+- `values-consul.yaml`, `values-redis.yaml`, `values-tikv.yaml`: Deploy and benchmark a single backend (Consul, Redis, or TiKV) using its official upstream image.
 
 You can customize these values files to match your requirements. For example, to disable the deployment of a specific system, set the `enabled` flag to `false` in the corresponding section.
 
@@ -132,6 +148,9 @@ The driver configuration specifies the target system to benchmark. Configuration
 - `conf/driver-oxia.yaml`
 - `conf/driver-etcd.yaml`
 - `conf/driver-zookeeper.yaml`
+- `conf/driver-consul.yaml`
+- `conf/driver-redis.yaml`
+- `conf/driver-tikv.yaml`
 
 ### Workload Configuration
 
