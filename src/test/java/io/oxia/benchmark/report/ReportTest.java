@@ -71,6 +71,13 @@ class ReportTest {
         assertThat(write.get("dist").size()).isGreaterThan(2);
         assertThat(out.resolve("workload-0-oxia-write.hgrm")).exists();
         assertThat(out.resolve("workload-0-oxia-read.hgrm")).doesNotExist();
+
+        // name + description flow from config through to the aggregated outputs
+        assertThat(arr.get(0).get("name").asText()).isEqualTo("write-only");
+        assertThat(arr.get(0).get("description").asText()).isEqualTo("Insert phase, 100% writes");
+        String csv = Files.readString(out.resolve("summary.csv"));
+        assertThat(csv).contains("index,name,description,driver");
+        assertThat(csv).contains("\"Insert phase, 100% writes\""); // comma-containing field gets quoted
     }
 
     @Test
@@ -110,6 +117,8 @@ class ReportTest {
         WorkloadResult r = new WorkloadResult();
         r.index = 0;
         r.instanceId = id;
+        r.name = "write-only";
+        r.description = "Insert phase, 100% writes";
         r.driver = driver;
         r.keyDistribution = "order";
         r.keyspaceSize = 1000;

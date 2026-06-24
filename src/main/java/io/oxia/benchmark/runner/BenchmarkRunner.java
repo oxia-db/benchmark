@@ -168,6 +168,8 @@ public class BenchmarkRunner {
             ConcurrentDoubleHistogram readHist,
             LongAdder failedOps) {
         WorkloadResult r = new WorkloadResult();
+        r.name = workload.name();
+        r.description = workload.description();
         r.driver = driver.name();
         r.readRatio = workload.readRatio();
         r.keyspaceSize = workload.keyspaceSize();
