@@ -62,7 +62,8 @@ for backend in "${BACKENDS[@]}"; do
         -f "$CHART/comparison/$backend.yaml" \
         -f "$CHART/comparison/workloads.yaml" \
         --set "workers[0].image=$IMAGE" \
-        --set "workers[0].imagePullPolicy=Never" >/dev/null 2>&1; then
+        --set "workers[0].imagePullPolicy=Never" \
+        --set "workers[0].memory=${WORKER_MEM:-640Mi}" >/dev/null 2>&1; then
     echo "!! helm install failed, skipping"; sweep; continue
   fi
 

@@ -10,14 +10,22 @@ global:
     allowInsecureImages: true
 
 oxia-cluster:
+  enabled: false
   image:
     repository: oxia/oxia
     tag: 0.16.7
     pullPolicy: IfNotPresent
 
-# Backends rendered by this chart's own templates (not subcharts) default to
-# disabled, so those templates are safe when a values file doesn't mention them.
-# Subchart backends (zookeeper, etcd, consul) are guarded by Chart.yaml conditions.
+# Every optional backend defaults to disabled, so a values file enables only the
+# one it wants. Without these defaults the subchart backends (zookeeper, etcd,
+# consul) render by default — a missing Chart.yaml condition path is treated as
+# enabled — and the raw-template backends (redis, tikv) nil-pointer.
+zookeeper:
+  enabled: false
+etcd:
+  enabled: false
+consul:
+  enabled: false
 redis:
   enabled: false
 tikv:
