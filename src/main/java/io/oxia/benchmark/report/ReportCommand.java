@@ -18,6 +18,7 @@ package io.oxia.benchmark.report;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.CustomLog;
 import org.HdrHistogram.DoubleHistogram;
+import org.HdrHistogram.DoubleHistogramIterationValue;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -72,12 +74,16 @@ public class ReportCommand implements Callable<Integer> {
                 all.stream()
                         .collect(Collectors.groupingBy(r -> r.index, TreeMap::new, Collectors.toList()));
 
+        Files.createDirectories(outDir);
         List<Summary> summaries = new ArrayList<>();
         for (List<WorkloadResult> group : byWorkload.values()) {
-            summaries.add(aggregate(group));
+            DoubleHistogram writeHist = merge(group.stream().map(r -> r.writeHistB64).toList());
+            DoubleHistogram readHist = merge(group.stream().map(r -> r.readHistB64).toList());
+            summaries.add(summarize(group, writeHist, readHist));
+            writeHgrm(group.get(0).index, "write", writeHist);
+            writeHgrm(group.get(0).index, "read", readHist);
         }
 
-        Files.createDirectories(outDir);
         writeJson(summaries);
         writeCsv(summaries);
         writeHtml(summaries);
@@ -102,7 +108,8 @@ public class ReportCommand implements Callable<Integer> {
         return out;
     }
 
-    private static Summary aggregate(List<WorkloadResult> group) {
+    private static Summary summarize(
+            List<WorkloadResult> group, DoubleHistogram writeHist, DoubleHistogram readHist) {
         WorkloadResult first = group.get(0);
         Summary s = new Summary();
         s.index = first.index;
@@ -118,8 +125,8 @@ public class ReportCommand implements Callable<Integer> {
         s.measuredSeconds = group.stream().mapToDouble(r -> r.measuredSeconds).max().orElse(0);
         s.failed = group.stream().mapToLong(r -> r.failedCount).sum();
 
-        fill(s.write, merge(group.stream().map(r -> r.writeHistB64).toList()), s.measuredSeconds);
-        fill(s.read, merge(group.stream().map(r -> r.readHistB64).toList()), s.measuredSeconds);
+        fill(s.write, writeHist, s.measuredSeconds);
+        fill(s.read, readHist, s.measuredSeconds);
         return s;
     }
 
@@ -148,6 +155,13 @@ public class ReportCommand implements Callable<Integer> {
             s.p99 = h.getValueAtPercentile(99);
             s.p999 = h.getValueAtPercentile(99.9);
             s.max = h.getMaxValue();
+            // Percentile sweep for the HdrHistogram-style distribution chart: [percentile, ms].
+            for (DoubleHistogramIterationValue v : h.percentiles(5)) {
+                double p = v.getPercentileLevelIteratedTo();
+                if (p < 100.0) {
+                    s.dist.add(new double[] {p, v.getValueIteratedTo()});
+                }
+            }
         }
     }
 
@@ -209,6 +223,19 @@ public class ReportCommand implements Callable<Integer> {
         Files.writeString(outDir.resolve("report.html"), template.replace("/*__DATA__*/", data));
     }
 
+    private void writeHgrm(int index, String type, DoubleHistogram h) throws IOException {
+        if (h.getTotalCount() == 0) {
+            return;
+        }
+        Path file = outDir.resolve("workload-" + index + "-" + type + ".hgrm");
+        try (PrintStream ps =
+                new PrintStream(Files.newOutputStream(file), false, StandardCharsets.UTF_8)) {
+            // Official HdrHistogram percentile-distribution format (ms); plot at
+            // https://hdrhistogram.github.io/HdrHistogram/
+            h.outputPercentileDistribution(ps, 1.0);
+        }
+    }
+
     /** Per-operation-type aggregated stats (latencies in ms). */
     public static class Stats {
         public double opsPerSec;
@@ -218,6 +245,7 @@ public class ReportCommand implements Callable<Integer> {
         public double p99;
         public double p999;
         public double max;
+        public List<double[]> dist = new ArrayList<>();
     }
 
     /** Aggregated metrics for one workload across all workers. */

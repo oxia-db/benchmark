@@ -116,7 +116,10 @@ This writes three files to `report/`:
 
 - `summary.csv` and `summary.json` — the raw per-workload metrics (throughput, p50/p95/p99/p99.9/max
   for reads and writes, failures), for building your own charts.
-- `report.html` — a self-contained chart of throughput and latency percentiles per workload.
+- `report.html` — a self-contained chart of throughput, latency percentiles, and the
+  HdrHistogram-style latency-by-percentile distribution per workload.
+- `workload-<i>-<write|read>.hgrm` — HdrHistogram percentile-distribution files, for the official
+  plotter at <https://hdrhistogram.github.io/HdrHistogram/>.
 
 For a distributed run, gather every worker's `*.jsonl` file into a single directory (e.g. via a
 shared volume or `kubectl cp`) before running `report`.

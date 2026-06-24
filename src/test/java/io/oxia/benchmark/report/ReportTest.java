@@ -68,6 +68,11 @@ class ReportTest {
         assertThat(write.get("p99").asDouble()).isCloseTo(20.0, within(0.1));
         assertThat(write.get("max").asDouble()).isCloseTo(20.0, within(0.1));
         assertThat(write.get("opsPerSec").asDouble()).isCloseTo(2000.0, within(1.0));
+        // percentile-distribution sweep + official HdrHistogram .hgrm output (write only; read is
+        // empty)
+        assertThat(write.get("dist").size()).isGreaterThan(2);
+        assertThat(out.resolve("workload-0-write.hgrm")).exists();
+        assertThat(out.resolve("workload-0-read.hgrm")).doesNotExist();
     }
 
     private void writeWorker(Path dir, String id, double latencyMs) throws Exception {
