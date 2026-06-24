@@ -1,0 +1,24 @@
+# TiKV: 1 PD + 1 TiKV store (raw PingCAP images), scaled for kind. 3 worker pods.
+# NOTE: these manifests have not been validated end-to-end; on arm64 the PingCAP
+# images may be unavailable. The orchestration skips a backend that fails to come up.
+tikv:
+  enabled: true
+  replicas: 1
+  image: pingcap/tikv:v8.5.1
+  cpu: "500m"
+  memory: 1Gi
+  pdImage: pingcap/pd:v8.5.1
+  pd:
+    cpu: "250m"
+    memory: 512Mi
+
+workers:
+  - name: tikv-worker
+    parallelism: 3
+    cpu: "300m"
+    memory: 384Mi
+    driverConfig:
+      driver: tikv
+      config:
+        pdAddresses: "bench-pd:2379"
+        threads: 32

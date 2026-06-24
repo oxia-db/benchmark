@@ -1,0 +1,36 @@
+# etcd (bitnami subchart), single-node, scaled for kind. 3 worker pods.
+etcd:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 2Gi
+  auth:
+    rbac:
+      create: false
+      allowNoneAuthentication: true
+    token:
+      enabled: false
+  image:
+    repository: bitnamilegacy/etcd
+  resources:
+    requests:
+      cpu: "300m"
+      memory: 512Mi
+    limits:
+      cpu: "500m"
+      memory: 768Mi
+  preUpgradeJob:
+    enabled: false
+
+workers:
+  - name: etcd-worker
+    parallelism: 3
+    cpu: "300m"
+    memory: 384Mi
+    driverConfig:
+      driver: etcd
+      config:
+        endpoints:
+          - "bench-etcd:2379"
+        dialTimeout: 5s

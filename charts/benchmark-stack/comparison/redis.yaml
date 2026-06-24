@@ -1,0 +1,15 @@
+# Redis single-node in-memory (speed-ceiling baseline), scaled for kind. 3 worker pods.
+redis:
+  enabled: true
+  cpu: "300m"
+  memory: 512Mi
+
+workers:
+  - name: redis-worker
+    parallelism: 3
+    cpu: "300m"
+    memory: 384Mi
+    driverConfig:
+      driver: redis
+      config:
+        address: "bench-redis:6379"
