@@ -62,6 +62,7 @@ public class ConsulDriver implements KVStoreDriver {
     public CompletableFuture<Void> put(String key, byte[] value) {
         HttpRequest request =
                 HttpRequest.newBuilder(URI.create(kvBaseUrl + key))
+                        .timeout(Duration.ofSeconds(10))
                         .PUT(BodyPublishers.ofByteArray(value))
                         .build();
         return client
@@ -79,7 +80,10 @@ public class ConsulDriver implements KVStoreDriver {
     @Override
     public CompletableFuture<Void> get(String key) {
         HttpRequest request =
-                HttpRequest.newBuilder(URI.create(kvBaseUrl + key + "?raw")).GET().build();
+                HttpRequest.newBuilder(URI.create(kvBaseUrl + key + "?raw"))
+                        .timeout(Duration.ofSeconds(10))
+                        .GET()
+                        .build();
         // 200 = found, 404 = absent; both are valid benchmark outcomes, matching the other drivers.
         return client.sendAsync(request, BodyHandlers.discarding()).thenApply(response -> null);
     }

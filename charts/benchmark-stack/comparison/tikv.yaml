@@ -19,7 +19,9 @@ tikv:
 
 workers:
   - name: tikv-worker
-    parallelism: 3
+    # 1 load-gen pod, not 3: the single-node store (~2Gi) is the throughput bottleneck and
+    # must fit this node alongside the long-lived oxia namespace, which leaves no room for 3.
+    parallelism: 1
     cpu: "300m"
     memory: 384Mi
     driverConfig:
