@@ -1,0 +1,27 @@
+# Oxia, single-node, scaled for a laptop kind node. 3 worker pods (distributed load generator).
+oxia-cluster:
+  enabled: true
+  replicationFactor: 1
+  initialShardCount: 1
+  coordinator:
+    cpu: "100m"
+    memory: 128Mi
+  server:
+    replicas: 1
+    cpu: "300m"
+    memory: 512Mi
+    storage: 2Gi
+  pprofEnabled: false
+  monitoringEnabled: false
+
+workers:
+  - name: oxia-worker
+    parallelism: 3
+    cpu: "300m"
+    memory: 384Mi
+    driverConfig:
+      driver: oxia
+      config:
+        serviceAddress: "bench:6648"
+        batchLinger: 5ms
+        batchMaxCount: 1000

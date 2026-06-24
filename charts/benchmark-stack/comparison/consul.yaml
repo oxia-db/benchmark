@@ -1,0 +1,33 @@
+# HashiCorp Consul (KV), single-server, scaled for kind. 3 worker pods.
+consul:
+  enabled: true
+  server:
+    replicas: 1
+    storage: 2Gi
+    resources:
+      requests:
+        cpu: "300m"
+        memory: 512Mi
+      limits:
+        cpu: "500m"
+        memory: 768Mi
+  client:
+    enabled: false
+  connectInject:
+    enabled: false
+  ui:
+    enabled: false
+  dns:
+    enabled: false
+
+workers:
+  - name: consul-worker
+    parallelism: 3
+    cpu: "300m"
+    memory: 384Mi
+    # HashiCorp's chart names the server StatefulSet <release>-consul-server.
+    waitForStsName: consul-server
+    driverConfig:
+      driver: consul
+      config:
+        address: "bench-consul-server:8500"

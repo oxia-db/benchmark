@@ -53,11 +53,20 @@ spec:
             limits:
               cpu: {{ .cpu }}
               memory: {{ .memory }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           args:
             - "--driver-config"
             - "/etc/{{ .name }}-driver/driver-config.yaml"
             - "--workloads"
             - "/etc/workloads/workloads.yaml"
+            - "--results-dir"
+            - "/results"
+            - "--instance-id"
+            - "$(POD_NAME)"
           volumeMounts:
             - name: driver-config
               mountPath: /etc/{{ .name }}-driver
@@ -65,6 +74,8 @@ spec:
             - name: workloads-config
               mountPath: /etc/workloads
               readOnly: true
+            - name: results
+              mountPath: /results
       volumes:
         - name: driver-config
           configMap:
@@ -72,4 +83,6 @@ spec:
         - name: workloads-config
           configMap:
             name: {{ $.Release.Name }}-workloads-config
+        - name: results
+          emptyDir: {}
 {{- end }}

@@ -14,3 +14,11 @@ oxia-cluster:
     repository: oxia/oxia
     tag: 0.16.7
     pullPolicy: IfNotPresent
+
+# Backends rendered by this chart's own templates (not subcharts) default to
+# disabled, so those templates are safe when a values file doesn't mention them.
+# Subchart backends (zookeeper, etcd, consul) are guarded by Chart.yaml conditions.
+redis:
+  enabled: false
+tikv:
+  enabled: false

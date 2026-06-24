@@ -46,8 +46,8 @@ class ReportTest {
     void mergesWorkersExactlyAndWritesOutputs(@TempDir Path tmp) throws Exception {
         Path results = tmp.resolve("results");
         Files.createDirectories(results);
-        writeWorker(results, "w1", 2.0); // 10k ops @ 2ms
-        writeWorker(results, "w2", 20.0); // 10k ops @ 20ms
+        writeWorker(results, "w1", "oxia", 2.0); // 10k ops @ 2ms
+        writeWorker(results, "w2", "oxia", 20.0); // 10k ops @ 20ms
 
         Path out = tmp.resolve("out");
         int code =
@@ -59,7 +59,7 @@ class ReportTest {
         assertThat(out.resolve("report.html")).exists();
 
         JsonNode arr = JSON.readTree(out.resolve("summary.json").toFile());
-        assertThat(arr).hasSize(1);
+        assertThat(arr).hasSize(1); // one driver, one workload
         JsonNode write = arr.get(0).get("write");
         assertThat(arr.get(0).get("workers").asInt()).isEqualTo(2);
         assertThat(write.get("count").asLong()).isEqualTo(20_000);
@@ -68,14 +68,41 @@ class ReportTest {
         assertThat(write.get("p99").asDouble()).isCloseTo(20.0, within(0.1));
         assertThat(write.get("max").asDouble()).isCloseTo(20.0, within(0.1));
         assertThat(write.get("opsPerSec").asDouble()).isCloseTo(2000.0, within(1.0));
-        // percentile-distribution sweep + official HdrHistogram .hgrm output (write only; read is
-        // empty)
         assertThat(write.get("dist").size()).isGreaterThan(2);
-        assertThat(out.resolve("workload-0-write.hgrm")).exists();
-        assertThat(out.resolve("workload-0-read.hgrm")).doesNotExist();
+        assertThat(out.resolve("workload-0-oxia-write.hgrm")).exists();
+        assertThat(out.resolve("workload-0-oxia-read.hgrm")).doesNotExist();
     }
 
-    private void writeWorker(Path dir, String id, double latencyMs) throws Exception {
+    @Test
+    void comparesAcrossDrivers(@TempDir Path tmp) throws Exception {
+        Path results = tmp.resolve("results");
+        Files.createDirectories(results);
+        writeWorker(results, "oxia-w1", "oxia", 3.0);
+        writeWorker(results, "etcd-w1", "etcd", 9.0);
+
+        Path out = tmp.resolve("out");
+        int code =
+                new CommandLine(new ReportCommand())
+                        .execute("--results-dir", results.toString(), "-o", out.toString());
+        assertThat(code).isZero();
+
+        // Same workload index, two drivers -> two separate summaries, each with its own latency.
+        JsonNode arr = JSON.readTree(out.resolve("summary.json").toFile());
+        assertThat(arr).hasSize(2);
+        for (JsonNode s : arr) {
+            assertThat(s.get("index").asInt()).isZero();
+            double p50 = s.get("write").get("p50").asDouble();
+            if (s.get("driver").asText().equals("oxia")) {
+                assertThat(p50).isCloseTo(3.0, within(0.1));
+            } else {
+                assertThat(p50).isCloseTo(9.0, within(0.1));
+            }
+        }
+        assertThat(out.resolve("workload-0-oxia-write.hgrm")).exists();
+        assertThat(out.resolve("workload-0-etcd-write.hgrm")).exists();
+    }
+
+    private void writeWorker(Path dir, String id, String driver, double latencyMs) throws Exception {
         DoubleHistogram h = new DoubleHistogram(3);
         for (int i = 0; i < 10_000; i++) {
             h.recordValue(latencyMs);
@@ -83,7 +110,7 @@ class ReportTest {
         WorkloadResult r = new WorkloadResult();
         r.index = 0;
         r.instanceId = id;
-        r.driver = "oxia";
+        r.driver = driver;
         r.keyDistribution = "order";
         r.keyspaceSize = 1000;
         r.valueSize = 64;

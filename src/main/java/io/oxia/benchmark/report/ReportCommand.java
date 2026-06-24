@@ -70,18 +70,26 @@ public class ReportCommand implements Callable<Integer> {
             return 1;
         }
 
-        Map<Integer, List<WorkloadResult>> byWorkload =
+        // Group by workload, then by driver, so each backend is aggregated separately for comparison.
+        Map<Integer, Map<String, List<WorkloadResult>>> byWorkloadDriver =
                 all.stream()
-                        .collect(Collectors.groupingBy(r -> r.index, TreeMap::new, Collectors.toList()));
+                        .collect(
+                                Collectors.groupingBy(
+                                        r -> r.index,
+                                        TreeMap::new,
+                                        Collectors.groupingBy(r -> r.driver, TreeMap::new, Collectors.toList())));
 
         Files.createDirectories(outDir);
         List<Summary> summaries = new ArrayList<>();
-        for (List<WorkloadResult> group : byWorkload.values()) {
-            DoubleHistogram writeHist = merge(group.stream().map(r -> r.writeHistB64).toList());
-            DoubleHistogram readHist = merge(group.stream().map(r -> r.readHistB64).toList());
-            summaries.add(summarize(group, writeHist, readHist));
-            writeHgrm(group.get(0).index, "write", writeHist);
-            writeHgrm(group.get(0).index, "read", readHist);
+        for (Map<String, List<WorkloadResult>> perDriver : byWorkloadDriver.values()) {
+            for (List<WorkloadResult> group : perDriver.values()) {
+                DoubleHistogram writeHist = merge(group.stream().map(r -> r.writeHistB64).toList());
+                DoubleHistogram readHist = merge(group.stream().map(r -> r.readHistB64).toList());
+                Summary s = summarize(group, writeHist, readHist);
+                summaries.add(s);
+                writeHgrm(s.index, s.driver, "write", writeHist);
+                writeHgrm(s.index, s.driver, "read", readHist);
+            }
         }
 
         writeJson(summaries);
@@ -89,7 +97,7 @@ public class ReportCommand implements Callable<Integer> {
         writeHtml(summaries);
 
         log.infof(
-                "Aggregated %d workload(s) from %d worker result(s) into %s",
+                "Aggregated %d (workload, driver) summaries from %d worker result(s) into %s",
                 summaries.size(), all.size(), outDir.toAbsolutePath());
         return 0;
     }
@@ -223,11 +231,12 @@ public class ReportCommand implements Callable<Integer> {
         Files.writeString(outDir.resolve("report.html"), template.replace("/*__DATA__*/", data));
     }
 
-    private void writeHgrm(int index, String type, DoubleHistogram h) throws IOException {
+    private void writeHgrm(int index, String driver, String type, DoubleHistogram h)
+            throws IOException {
         if (h.getTotalCount() == 0) {
             return;
         }
-        Path file = outDir.resolve("workload-" + index + "-" + type + ".hgrm");
+        Path file = outDir.resolve("workload-" + index + "-" + driver + "-" + type + ".hgrm");
         try (PrintStream ps =
                 new PrintStream(Files.newOutputStream(file), false, StandardCharsets.UTF_8)) {
             // Official HdrHistogram percentile-distribution format (ms); plot at
