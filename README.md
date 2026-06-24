@@ -149,6 +149,8 @@ The chart is configured using values files. There are several pre-configured val
 
 You can customize these values files to match your requirements. For example, to disable the deployment of a specific system, set the `enabled` flag to `false` in the corresponding section.
 
+The **workload** to run is not part of the values files — it is supplied at install time from a file under `conf/` via `--set-file workloadsYaml=conf/<file>.yaml`, so workload definitions live in one place and are never duplicated. Use `conf/workload-mixed.yaml` (the standard YCSB-style set), `conf/workload-test.yaml` (a quick single-workload smoke), `conf/workload-comparison.yaml` (the cross-driver write/read pair), or your own.
+
 ### Deploying the Benchmark
 
 To deploy the benchmark, use the `helm` command.
@@ -158,6 +160,7 @@ Example for deploying the Oxia benchmark with a 3-server cluster:
 ```bash
 helm install benchmark charts/benchmark-stack \
   -f charts/benchmark-stack/values-3-server.yaml \
+  --set-file workloadsYaml=conf/workload-mixed.yaml \
   --set zookeeper.enabled=false \
   --set etcd.enabled=false
 ```

@@ -1,0 +1,26 @@
+# Cross-driver comparison workloads: a write phase then a read phase over the same small
+# keyspace, so the reads hit existing keys on every backend. Short, for fast multi-backend sweeps.
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+items:
+  - name: write-only
+    description: Insert phase — sequential keys, 100% writes
+    readRatio: 0.0
+    keyspaceSize: 10000
+    keyDistribution: order
+    valueSize: 64
+    targetRate: 1000
+    duration: 60s
+    warmup: 5s
+    parallelism: 8
+  - name: read-only
+    description: Read phase — uniform random reads over the populated keyspace
+    readRatio: 1.0
+    keyspaceSize: 10000
+    keyDistribution: uniform
+    valueSize: 64
+    targetRate: 1000
+    duration: 60s
+    warmup: 5s
+    parallelism: 8

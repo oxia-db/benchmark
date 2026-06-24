@@ -4,43 +4,14 @@
 # the consensus stores, by design.
 #
 # Install with release name "benchmark" (the worker address below assumes it):
-#   helm install benchmark charts/benchmark-stack -f charts/benchmark-stack/values-redis.yaml
+#   helm install benchmark charts/benchmark-stack -f charts/benchmark-stack/values-redis.yaml \
+#     --set-file workloadsYaml=conf/workload-mixed.yaml
 
 redis:
   enabled: true
   image: redis:7.2-alpine
   cpu: "2"
   memory: 4Gi
-
-workloads:
-  exitWhenFinish: false
-  metadata:
-    serverNum: 1
-  items:
-    # insert-only
-    - readRatio: 0.0
-      keyspaceSize: 1000000
-      keyDistribution: order
-      valueSize: 64
-      targetRate: 50000
-      duration: 5m
-      parallelism: 100
-    # mixed 50/50, zipf
-    - readRatio: 0.5
-      keyspaceSize: 1000000
-      keyDistribution: zipf
-      valueSize: 64
-      targetRate: 50000
-      duration: 5m
-      parallelism: 100
-    # read-only, zipf
-    - readRatio: 1.0
-      keyspaceSize: 1000000
-      keyDistribution: zipf
-      valueSize: 64
-      targetRate: 50000
-      duration: 5m
-      parallelism: 100
 
 workers:
   - name: redis-worker

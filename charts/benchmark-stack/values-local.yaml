@@ -1,6 +1,7 @@
 # Scaled-down values for a local kind/docker-desktop run.
 # Sized to fit alongside other workloads on a small (~8 GiB) single node.
-# Deploy:  helm install bench charts/benchmark-stack -n bench --create-namespace -f charts/benchmark-stack/values-local.yaml
+# Deploy:  helm install bench charts/benchmark-stack -n bench --create-namespace \
+#            -f charts/benchmark-stack/values-local.yaml --set-file workloadsYaml=conf/workload-test.yaml
 
 global:
   security:
@@ -32,21 +33,8 @@ zookeeper:
 etcd:
   enabled: false
 
-# Single short write-only smoke workload (~60s) at a modest rate the tiny
-# cluster can sustain, so latency numbers are clean rather than queue-bound.
-workloads:
-  exitWhenFinish: false
-  metadata:
-    serverNum: 3
-  items:
-    - readRatio: 0.0
-      keyspaceSize: 100000
-      keyDistribution: order
-      valueSize: 64
-      targetRate: 5000
-      duration: 60s
-      parallelism: 16
-
+# The workload is supplied from conf/ at install time, e.g.:
+#   --set-file workloadsYaml=conf/workload-test.yaml
 # One small worker pod
 workers:
   - name: oxia-worker
