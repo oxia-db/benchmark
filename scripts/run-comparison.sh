@@ -69,7 +69,8 @@ for backend in "${BACKENDS[@]}"; do
     echo "!! helm install failed, skipping"; sweep; continue
   fi
 
-  echo "   waiting for 3 worker pods to finish (timeout ${PER_BACKEND_TIMEOUT}s)..."
+  expected=$(kc get deploy "$worker" -o jsonpath='{.spec.replicas}' 2>/dev/null); [ -z "$expected" ] && expected=1
+  echo "   waiting for $expected worker pod(s) to finish (timeout ${PER_BACKEND_TIMEOUT}s)..."
   deadline=$((SECONDS + PER_BACKEND_TIMEOUT)); finished=0; pods=""
   while [ $SECONDS -lt $deadline ]; do
     pods=$(kc get pods -l "app=$worker" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
@@ -78,7 +79,7 @@ for backend in "${BACKENDS[@]}"; do
     for p in $pods; do
       kc logs "$p" -c "$worker" 2>/dev/null | grep -q "All workloads finished" && fin=$((fin + 1))
     done
-    [ "$n" -ge 3 ] && [ "$fin" -ge "$n" ] && { finished=1; break; }
+    [ "$n" -ge "$expected" ] && [ "$fin" -ge "$n" ] && { finished=1; break; }
     # fail fast on unrecoverable pod states (bad image, crash loop) instead of waiting the full timeout
     bad=$(kc get pods -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}{range .status.initContainerStatuses[*]}{.state.waiting.reason}{" "}{end}{end}' 2>/dev/null)
     if echo "$bad" | grep -qE 'ImagePullBackOff|ErrImagePull|CrashLoopBackOff|InvalidImageName'; then

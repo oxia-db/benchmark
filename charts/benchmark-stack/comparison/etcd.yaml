@@ -25,7 +25,9 @@ etcd:
 
 workers:
   - name: etcd-worker
-    parallelism: 3
+    # 2 workers, not 3: the jetcd/gRPC client's off-heap growth over a 60s run needs ~1.5Gi
+    # per worker, and 3 of those don't fit the node alongside the long-lived oxia namespace.
+    parallelism: 2
     cpu: "300m"
     memory: 384Mi
     driverConfig:
