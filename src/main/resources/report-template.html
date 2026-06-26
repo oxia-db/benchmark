@@ -75,11 +75,29 @@ const fmt = (x) => x ? x.toFixed(x < 100 ? 3 : 1) : '0';
 indices.forEach(idx => {
   const rows = byWorkload[idx];
   const w = rows[0];
+  const throughputMode = !(w.targetRate > 0); // targetRate 0/missing => throughput mode
   const sec = document.createElement('div');
   sec.className = 'card';
   let html = `<h2>Workload #${idx}${w.name ? ' — ' + esc(w.name) : ''}</h2>`;
   if (w.description) html += `<p class="sub" style="margin:.25rem 0 .5rem">${esc(w.description)}</p>`;
-  html += `<p class="sub" style="margin:0 0 .75rem">${w.keyDistribution}, readRatio ${w.readRatio}, ${w.valueSize}B value, target ${w.targetRate}/s, parallelism ${w.parallelism}</p>`;
+  const rate = throughputMode ? 'throughput mode (send as fast as possible)' : `target ${w.targetRate}/s`;
+  html += `<p class="sub" style="margin:0 0 .75rem">${w.keyDistribution}, readRatio ${w.readRatio}, ${w.valueSize}B value, ${rate}, parallelism ${w.parallelism}</p>`;
+
+  if (throughputMode) {
+    // Throughput test: latency is irrelevant; show achieved ops/s per driver only, no latency chart.
+    html += '<div class="wrap"><table>';
+    html += '<tr><th class="l">driver</th><th>workers</th><th>write ops/s</th><th>read ops/s</th><th>total ops/s</th><th>failed</th></tr>';
+    rows.forEach(r => {
+      html += `<tr><td class="l" style="color:${color[r.driver]}">${r.driver}</td><td>${r.workers}</td>`
+        + `<td>${fmt(r.write.opsPerSec)}</td><td>${fmt(r.read.opsPerSec)}</td><td>${fmt(r.write.opsPerSec + r.read.opsPerSec)}</td>`
+        + `<td>${r.failed}</td></tr>`;
+    });
+    html += '</table></div>';
+    sec.innerHTML = html;
+    container.appendChild(sec);
+    return;
+  }
+
   html += `<canvas id="pct-${idx}"></canvas><div class="wrap"><table>`;
   html += '<tr><th class="l">driver</th><th>workers</th><th>w ops/s</th><th>w p50</th><th>w p99</th><th>w p99.9</th><th>w max</th><th>r ops/s</th><th>r p50</th><th>r p99</th><th>r p99.9</th><th>r max</th><th>failed</th></tr>';
   rows.forEach(r => {

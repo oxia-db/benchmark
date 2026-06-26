@@ -34,6 +34,10 @@ public class Workload {
     @JsonProperty private String warmup;
     @JsonProperty private int parallelism;
 
+    // Caps concurrent in-flight requests (client memory safety). With targetRate unset/0 — i.e.
+    // throughput mode, send as fast as possible — this is the only throttle. Defaults to 10000.
+    @JsonProperty private int maxOutstandingRequests;
+
     public String name() {
         return name;
     }
@@ -74,9 +78,16 @@ public class Workload {
         return parallelism;
     }
 
+    public int maxOutstandingRequests() {
+        return maxOutstandingRequests;
+    }
+
     public void applyDefaults() {
         if (keyDistribution == null || keyDistribution.isEmpty()) {
             keyDistribution = "uniform";
+        }
+        if (maxOutstandingRequests <= 0) {
+            maxOutstandingRequests = 10_000;
         }
     }
 
@@ -87,8 +98,9 @@ public class Workload {
         if (valueSize <= 0) {
             throw new IllegalArgumentException("valueSize must be greater than 0");
         }
-        if (targetRate <= 0) {
-            throw new IllegalArgumentException("targetRate must be greater than 0");
+        if (targetRate < 0) {
+            throw new IllegalArgumentException(
+                    "targetRate must be >= 0 (0 = send as fast as possible, bounded by maxOutstandingRequests)");
         }
         if (duration == null || duration.isEmpty()) {
             throw new IllegalArgumentException("duration must be specified");
