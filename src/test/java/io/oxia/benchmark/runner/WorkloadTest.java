@@ -37,11 +37,11 @@ class WorkloadTest {
         Workloads wls = Workloads.load(Path.of("conf/workload-mixed.yaml"));
         Workload first = wls.items().get(0);
         assertThat(first.readRatio()).isEqualTo(0.0);
-        assertThat(first.keyspaceSize()).isEqualTo(100_000);
+        assertThat(first.keyspaceSize()).isEqualTo(10_000_000);
         assertThat(first.keyDistribution()).isEqualTo("order");
         assertThat(first.valueSize()).isEqualTo(64);
         assertThat(first.targetRate()).isEqualTo(40_000);
-        assertThat(first.parallelism()).isEqualTo(1);
+        assertThat(first.parallelism()).isEqualTo(8);
     }
 
     @Test
@@ -95,6 +95,14 @@ class WorkloadTest {
         assertThat(Workload.parseDuration("10s").getSeconds()).isEqualTo(10);
         assertThat(Workload.parseDuration("5m").toMinutes()).isEqualTo(5);
         assertThat(Workload.parseDuration("100ms").toMillis()).isEqualTo(100);
+    }
+
+    @Test
+    void throughputModeAllowsZeroRateAndDefaultsMaxOutstanding() {
+        Workload wl = createWorkload(1000, 64, 0, "10s", 8, 0.0, "uniform"); // targetRate 0
+        wl.applyDefaults();
+        wl.validate(); // 0 rate is valid: throughput mode (send as fast as maxOutstanding allows)
+        assertThat(wl.maxOutstandingRequests()).isEqualTo(10_000); // default
     }
 
     private static Workload createWorkload(

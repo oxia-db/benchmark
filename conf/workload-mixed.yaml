@@ -10,7 +10,7 @@ items:
     valueSize: 64
     targetRate: 40000
     duration: 5m
-    parallelism: 1000
+    parallelism: 8
   - name: YCSB X
     description: 100% updates, zipf distribution
     readRatio: 0.0
@@ -19,7 +19,7 @@ items:
     valueSize: 64
     targetRate: 40000
     duration: 5m
-    parallelism: 1000
+    parallelism: 8
   - name: YCSB A
     description: 50% updates, 50% reads, zipf distribution
     readRatio: 0.5
@@ -28,7 +28,7 @@ items:
     valueSize: 64
     targetRate: 40000
     duration: 5m
-    parallelism: 1000
+    parallelism: 8
   - name: YCSB C
     description: 100% reads, zipf distribution
     readRatio: 1
@@ -37,4 +37,4 @@ items:
     valueSize: 64
     targetRate: 40000
     duration: 5m
-    parallelism: 1000
+    parallelism: 8

@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -79,6 +80,8 @@ public class BenchmarkRunner {
         Duration warmupDuration = workload.warmup();
         Duration duration = workload.duration();
         int parallelism = workload.parallelism();
+        int maxOutstanding = workload.maxOutstandingRequests();
+        Semaphore outstanding = new Semaphore(maxOutstanding > 0 ? maxOutstanding : 10_000);
 
         ConcurrentDoubleHistogram periodWriteHist = new ConcurrentDoubleHistogram(3);
         ConcurrentDoubleHistogram periodReadHist = new ConcurrentDoubleHistogram(3);
@@ -100,6 +103,7 @@ public class BenchmarkRunner {
                                             seqGen,
                                             running,
                                             warmingUp,
+                                            outstanding,
                                             periodWriteHist,
                                             periodReadHist,
                                             totalWriteHist,
@@ -191,6 +195,7 @@ public class BenchmarkRunner {
             SequenceGenerator seqGen,
             AtomicBoolean running,
             AtomicBoolean warmingUp,
+            Semaphore outstanding,
             ConcurrentDoubleHistogram periodWriteHist,
             ConcurrentDoubleHistogram periodReadHist,
             ConcurrentDoubleHistogram totalWriteHist,
@@ -199,13 +204,32 @@ public class BenchmarkRunner {
             LongAdder totalFailedOps) {
 
         byte[] value = new byte[workload.valueSize()];
-        double perWorkerRate = workload.targetRate() / workload.parallelism();
-        UniformRateLimiter limiter = new UniformRateLimiter(perWorkerRate);
+        // targetRate 0 = throughput mode: no pacing, send as fast as the in-flight cap allows.
+        boolean rateMode = workload.targetRate() > 0;
+        UniformRateLimiter limiter =
+                rateMode ? new UniformRateLimiter(workload.targetRate() / workload.parallelism()) : null;
 
         while (running.get()) {
-            long intendedSendTime = limiter.acquire();
-            UniformRateLimiter.sleepUntil(intendedSendTime);
-            if (!running.get()) break;
+            long intendedSendTime;
+            if (rateMode) {
+                intendedSendTime = limiter.acquire();
+                UniformRateLimiter.sleepUntil(intendedSendTime);
+                if (!running.get()) break;
+            } else {
+                intendedSendTime = System.nanoTime();
+            }
+
+            // Bound concurrent in-flight requests (memory cap; the sole throttle in throughput mode).
+            try {
+                outstanding.acquire();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            if (!running.get()) {
+                outstanding.release();
+                break;
+            }
 
             boolean isWarmup = warmingUp.get();
             long sendTimeNanos = System.nanoTime();
@@ -226,6 +250,7 @@ public class BenchmarkRunner {
 
             future.whenComplete(
                     (v, ex) -> {
+                        outstanding.release();
                         if (isWarmup) return;
 
                         // End-to-end latency: actual send time to completion
@@ -235,7 +260,8 @@ public class BenchmarkRunner {
                                         TimeUnit.NANOSECONDS.toMicros(System.nanoTime() - sendTimeNanos));
                         double latencyMs = latencyMicros / 1_000.0;
                         if (ex != null) {
-                            log.error().exception(ex).log("Operation error");
+                            // Count failures (surfaced in Stats + failedCount); don't log a trace
+                            // per op — it floods when a throughput run saturates.
                             periodFailedOps.increment();
                             totalFailedOps.increment();
                             opLatency

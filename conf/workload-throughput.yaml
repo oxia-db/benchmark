@@ -1,0 +1,20 @@
+# Max-throughput test: send as fast as possible, bounded only by maxOutstandingRequests (the
+# in-flight cap). targetRate is omitted (= 0 = unlimited), so the achieved throughput is the
+# system's max at that concurrency. Latency here is NOT coordinated-omission-corrected — we don't
+# care about latency for a throughput test. A few submitter threads suffice: with a true async
+# client, concurrency comes from outstanding requests, not threads.
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+items:
+  - name: write-throughput
+    description: write, as fast as possible
+    readRatio: 0.0
+    keyDistribution: uniform
+    keyspaceSize: 10000000
+    valueSize: 64
+    parallelism: 8
+    maxOutstandingRequests: 10000   # in-flight cap = the request concurrency
+    warmup: 10s
+    duration: 60s
+    # targetRate omitted -> throughput mode (no rate limiter)
