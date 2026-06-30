@@ -19,7 +19,6 @@ import io.oxia.benchmark.driver.KVStoreDriver;
 import io.oxia.client.api.AsyncOxiaClient;
 import io.oxia.client.api.OxiaClientBuilder;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import lombok.CustomLog;
@@ -43,10 +42,6 @@ public class OxiaDriver implements KVStoreDriver {
 
         if (config.containsKey("namespace")) {
             builder.namespace((String) config.get("namespace"));
-        }
-        if (config.containsKey("batchLinger")) {
-            Duration batchLinger = parseDuration((String) config.get("batchLinger"));
-            builder.batchLinger(batchLinger);
         }
         if (config.containsKey("batchMaxCount")) {
             int batchMaxCount = ((Number) config.get("batchMaxCount")).intValue();
@@ -76,15 +71,5 @@ public class OxiaDriver implements KVStoreDriver {
                 throw new IOException(e);
             }
         }
-    }
-
-    private static Duration parseDuration(String s) {
-        if (s.endsWith("ms")) {
-            return Duration.ofMillis(Long.parseLong(s.substring(0, s.length() - 2)));
-        }
-        if (s.endsWith("s")) {
-            return Duration.ofSeconds(Long.parseLong(s.substring(0, s.length() - 1)));
-        }
-        return Duration.parse("PT" + s);
     }
 }
