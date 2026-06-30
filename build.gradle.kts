@@ -62,7 +62,8 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-slf4j2-impl:2.24.3")
 
     // Drivers
-    implementation("io.github.oxia-db:oxia-client:0.7.4")
+    implementation(platform("io.opentelemetry:opentelemetry-bom:1.63.0"))
+    implementation("io.github.oxia-db:oxia-client:0.9.0")
     implementation("io.etcd:jetcd-core:0.8.6")
     implementation("org.tikv:tikv-client-java:3.3.5")
     implementation("org.apache.zookeeper:zookeeper:3.9.3")
