@@ -31,5 +31,4 @@ workers:
       label: oxia-3
       config:
         serviceAddress: "bench-oxia:6648"
-        batchLinger: 5ms
         batchMaxCount: 1000
