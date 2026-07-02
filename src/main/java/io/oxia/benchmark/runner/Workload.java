@@ -123,7 +123,8 @@ public class Workload {
     public String toString() {
         return String.format(
                 "{readRatio=%.1f, keyspaceSize=%d, keyDistribution=%s, valueSize=%d,"
-                        + " targetRate=%.0f, duration=%s, warmup=%s, parallelism=%d}",
+                        + " targetRate=%.0f, duration=%s, warmup=%s, parallelism=%d,"
+                        + " maxOutstandingRequests=%d}",
                 readRatio,
                 keyspaceSize,
                 keyDistribution,
@@ -131,7 +132,8 @@ public class Workload {
                 targetRate,
                 duration,
                 warmup(),
-                parallelism);
+                parallelism,
+                maxOutstandingRequests);
     }
 
     static Duration parseDuration(String s) {
