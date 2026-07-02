@@ -14,7 +14,7 @@ items:
     keyspaceSize: 10000000
     valueSize: 64
     parallelism: 8
-    maxOutstandingRequests: 10000   # in-flight cap = the request concurrency
+    maxOutstandingRequests: 100000   # in-flight cap = the request concurrency
     warmup: 10s
     duration: 60s
     # targetRate omitted -> throughput mode (no rate limiter)

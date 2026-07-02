@@ -37,5 +37,4 @@ workers:
       driver: oxia
       config:
         serviceAddress: "benchmark-12:6648"
-        batchLinger: 10ms
         batchMaxCount: 5000
