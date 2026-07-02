@@ -46,11 +46,6 @@ dependencies {
     // Latency tracking
     implementation("org.hdrhistogram:HdrHistogram:2.2.2")
 
-    // Prometheus metrics
-    implementation("io.prometheus:prometheus-metrics-core:1.3.6")
-    implementation("io.prometheus:prometheus-metrics-exporter-httpserver:1.3.6")
-    implementation("io.prometheus:prometheus-metrics-instrumentation-jvm:1.3.6")
-
     // Lombok
     compileOnly("org.projectlombok:lombok:1.18.36")
     annotationProcessor("org.projectlombok:lombok:1.18.36")
