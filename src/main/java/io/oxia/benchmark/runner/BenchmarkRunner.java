@@ -51,6 +51,11 @@ public class BenchmarkRunner {
         SequenceGenerator seqGen =
                 SequenceGenerator.create(workload.keyDistribution(), workload.keyspaceSize());
 
+        // Pre-build every key once, so the hot submission loop is a plain array read with no
+        // per-op allocation or formatting. The sequence generator returns indices into this array
+        // per the configured distribution.
+        String[] keys = buildKeys(workload.keyspaceSize());
+
         Duration warmupDuration = workload.warmup();
         Duration duration = workload.duration();
         int parallelism = workload.parallelism();
@@ -88,6 +93,7 @@ public class BenchmarkRunner {
                             () ->
                                     generateTraffic(
                                             seqGen,
+                                            keys,
                                             running,
                                             warmingUp,
                                             perThreadOutstanding,
@@ -187,6 +193,7 @@ public class BenchmarkRunner {
 
     private void generateTraffic(
             SequenceGenerator seqGen,
+            String[] keys,
             AtomicBoolean running,
             AtomicBoolean warmingUp,
             int perThreadOutstanding,
@@ -225,7 +232,7 @@ public class BenchmarkRunner {
             boolean isWarmup = warmingUp.get();
             long sendTimeNanos = System.nanoTime();
 
-            String key = key(seqGen.next());
+            String key = keys[(int) seqGen.next()];
             boolean isRead = ThreadLocalRandom.current().nextDouble() < workload.readRatio();
             CompletableFuture<Void> future = isRead ? driver.get(key) : driver.put(key, value);
 
@@ -256,16 +263,24 @@ public class BenchmarkRunner {
         }
     }
 
-    /** Fast equivalent of {@code String.format("k-%016d", n)} for the hot submission path. */
-    private static String key(long n) {
+    /**
+     * Pre-build all keys up front ("k-" + a 16-digit zero-padded index) so the hot loop only does an
+     * array read. Allocates one String per key in the keyspace.
+     */
+    private static String[] buildKeys(long keyspaceSize) {
+        String[] keys = new String[(int) keyspaceSize];
         char[] c = new char[18];
         c[0] = 'k';
         c[1] = '-';
-        for (int i = 17; i >= 2; i--) {
-            c[i] = (char) ('0' + (int) (n % 10));
-            n /= 10;
+        for (int i = 0; i < keys.length; i++) {
+            long n = i;
+            for (int j = 17; j >= 2; j--) {
+                c[j] = (char) ('0' + (int) (n % 10));
+                n /= 10;
+            }
+            keys[i] = new String(c);
         }
-        return new String(c);
+        return keys;
     }
 
     private static double safeMax(DoubleHistogram hist) {
