@@ -53,9 +53,32 @@ class DriverConfigTest {
 
     @Test
     void unknownDriverThrows() {
-        DriverConfig config = new DriverConfig("unknown", java.util.Map.of());
+        DriverConfig config = new DriverConfig("unknown", null, java.util.Map.of());
         assertThatThrownBy(() -> DriverFactory.build(config))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unknown driver");
+    }
+
+    @Test
+    void labelDefaultsToNull() throws IOException {
+        DriverConfig config = DriverConfig.load(Path.of("conf/driver-oxia.yaml"));
+        assertThat(config.label()).isNull();
+    }
+
+    @Test
+    void labelParsedFromYaml(@org.junit.jupiter.api.io.TempDir Path tmp) throws Exception {
+        Path f = tmp.resolve("driver.yaml");
+        java.nio.file.Files.writeString(
+                f,
+                """
+                driver: redis
+                label: redis-testlabel
+                config:
+                  host: localhost
+                  port: 16379
+                """);
+        DriverConfig config = DriverConfig.load(f);
+        assertThat(config.driver()).isEqualTo("redis");
+        assertThat(config.label()).isEqualTo("redis-testlabel");
     }
 }
