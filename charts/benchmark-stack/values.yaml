@@ -13,7 +13,9 @@ oxia-cluster:
   enabled: false
   image:
     repository: oxia/oxia
-    tag: 0.16.7
+    # Chart 0.0.7 launches the server with --sconfig, which needs oxia >= 0.17;
+    # 0.16.x images won't start under this chart.
+    tag: latest
     pullPolicy: IfNotPresent
 
 # Every optional backend defaults to disabled, so a values file enables only the

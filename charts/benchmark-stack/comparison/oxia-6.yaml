@@ -1,4 +1,4 @@
-# Oxia, single-node, sized for a real cluster (3 CPU / 4Gi per server node). 3 worker pods (distributed load generator).
+# Oxia, 6-node cluster, 12 shards (2x pods). Results labeled "oxia-6".
 oxia-cluster:
   enabled: true
   # The client dials the k8s Service short name; the server's authority validation
@@ -6,12 +6,12 @@ oxia-cluster:
   allowExtraAuthorities:
     - "bench-oxia:6648"
   replicationFactor: 3
-  initialShardCount: 3
+  initialShardCount: 12
   coordinator:
     cpu: "100m"
     memory: 128Mi
   server:
-    replicas: 3
+    replicas: 6
     cpu: "3"
     memory: 4Gi
     storage: 2Gi
@@ -19,14 +19,13 @@ oxia-cluster:
   monitoringEnabled: false
 
 workers:
-  # Installed with release name "bench-oxia", so the oxia-cluster subchart names its
-  # resources bench-oxia-0/1/2 and bench-oxia-coordinator; this worker is bench-oxia-worker.
   - name: worker
     parallelism: 3
     cpu: "300m"
     memory: 384Mi
     driverConfig:
       driver: oxia
+      label: oxia-6
       config:
         serviceAddress: "bench-oxia:6648"
         batchLinger: 5ms

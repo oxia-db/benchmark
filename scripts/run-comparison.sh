@@ -18,6 +18,11 @@ CHART="charts/benchmark-stack"
 CTX="${KUBE_CONTEXT:-kind-matteo}"
 NS="${NS:-bench}"
 IMAGE="${IMAGE:-oxia/benchmark:local}"
+IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-Never}"
+NODE_POOL="${NODE_POOL:-}"               # if set, pin all pods to this GKE nodepool + tolerate its taints
+WORKER_REPLICAS="${WORKER_REPLICAS:-}"   # if set, override the per-backend worker replica count
+STORAGE_CLASS="${STORAGE_CLASS:-}"       # if set, put every backend's data PVCs on this storage class
+OXIA_IMAGE="${OXIA_IMAGE:-}"             # if set (repo:tag), run the oxia backend with this server image
 WORKLOADS="${WORKLOADS:-conf/workload-comparison.yaml}"
 RESULTS="${RESULTS:-comparison-results}"
 OUT="${OUT:-comparison-report}"
@@ -34,8 +39,10 @@ hl() { helm --kube-context "$CTX" -n "$NS" "$@"; }
 # The oxia-cluster subchart names everything after the release name, so oxia is
 # installed as "bench-oxia" to get bench-oxia-0 / bench-oxia-coordinator. Other
 # backends' charts already include the backend name, so they share release "bench".
-release_for() { [ "$1" = oxia ] && echo "bench-oxia" || echo "bench"; }
-worker_for()  { [ "$1" = oxia ] && echo "bench-oxia-worker" || echo "bench-$1-worker"; }
+# The oxia-N size variants (comparison/oxia-3.yaml, ...) all reuse the bench-oxia
+# release/worker names — they run sequentially and are swept in between.
+release_for() { case "$1" in oxia*) echo "bench-oxia" ;; *) echo "bench" ;; esac }
+worker_for()  { case "$1" in oxia*) echo "bench-oxia-worker" ;; *) echo "bench-$1-worker" ;; esac }
 
 # Remove everything in the namespace, including the oxia coordinator's runtime
 # <release>-status ConfigMap (persists shard state across helm uninstall) and PVCs.
@@ -60,13 +67,41 @@ for backend in "${BACKENDS[@]}"; do
   release=$(release_for "$backend"); worker=$(worker_for "$backend")
   echo ""
   echo "==================== $backend (release $release) ===================="
+  repl_set=""; [ -n "$WORKER_REPLICAS" ] && repl_set="--set workers[0].parallelism=$WORKER_REPLICAS"
+  # Each chart exposes its data-PVC storage class under a different key (redis is
+  # in-memory by design and has none).
+  sc_set=""
+  if [ -n "$STORAGE_CLASS" ]; then
+    case $backend in
+      oxia*)     sc_set="--set oxia-cluster.server.storageClassName=$STORAGE_CLASS" ;;
+      etcd)      sc_set="--set etcd.persistence.storageClass=$STORAGE_CLASS" ;;
+      zookeeper) sc_set="--set zookeeper.persistence.storageClass=$STORAGE_CLASS" ;;
+      consul)    sc_set="--set consul.server.storageClass=$STORAGE_CLASS" ;;
+      tikv)      sc_set="--set tikv.storageClassName=$STORAGE_CLASS --set tikv.pd.storageClassName=$STORAGE_CLASS" ;;
+    esac
+  fi
+  # Custom oxia server build (repo:tag), e.g. a release candidate under test.
+  img_set=""
+  if [[ "$backend" == oxia* ]] && [ -n "$OXIA_IMAGE" ]; then
+    img_set="--set oxia-cluster.image.repository=${OXIA_IMAGE%%:*} --set oxia-cluster.image.tag=${OXIA_IMAGE##*:} --set oxia-cluster.image.pullPolicy=Always"
+  fi
   if ! hl install "$release" "$CHART" --create-namespace \
         -f "$CHART/comparison/$backend.yaml" \
         --set-file "workloadsYaml=$WORKLOADS" \
         --set "workers[0].image=$IMAGE" \
-        --set "workers[0].imagePullPolicy=Never" \
-        --set "workers[0].memory=${WORKER_MEM:-896Mi}" >/dev/null 2>&1; then
+        --set "workers[0].imagePullPolicy=$IMAGE_PULL_POLICY" \
+        --set "workers[0].memory=${WORKER_MEM:-896Mi}" \
+        ${WORKER_CPU:+--set workers[0].cpu=$WORKER_CPU} \
+        $repl_set $sc_set $img_set >/dev/null 2>&1; then
     echo "!! helm install failed, skipping"; sweep; continue
+  fi
+
+  # On a reserved/tainted pool (e.g. a GKE spot pool), pin every pod to it and tolerate its
+  # taints, then recycle any pods that started before the patch so they reschedule there.
+  if [ -n "$NODE_POOL" ]; then
+    sched='{"spec":{"template":{"spec":{"nodeSelector":{"cloud.google.com/gke-nodepool":"'"$NODE_POOL"'"},"tolerations":[{"key":"nodepool","operator":"Exists","effect":"NoSchedule"},{"key":"cloud.google.com/gke-spot","operator":"Exists","effect":"NoSchedule"}]}}}}'
+    for res in $(kc get deploy,statefulset -o name 2>/dev/null); do kc patch "$res" --type merge -p "$sched" >/dev/null 2>&1; done
+    kc delete pods --all --grace-period=0 >/dev/null 2>&1
   fi
 
   expected=$(kc get deploy "$worker" -o jsonpath='{.spec.replicas}' 2>/dev/null); [ -z "$expected" ] && expected=1

@@ -1,4 +1,4 @@
-# ZooKeeper (bitnami subchart), single-node, scaled for kind. 3 worker pods.
+# ZooKeeper (bitnami subchart), single-node, sized for a real cluster (3 CPU / 4Gi). 3 worker pods.
 zookeeper:
   enabled: true
   replicaCount: 1
@@ -9,11 +9,11 @@ zookeeper:
     repository: bitnamilegacy/zookeeper
   resources:
     requests:
-      cpu: "300m"
-      memory: 512Mi
+      cpu: "3"
+      memory: 4Gi
     limits:
-      cpu: "500m"
-      memory: 768Mi
+      cpu: "3"
+      memory: 4Gi
 
 workers:
   - name: zookeeper-worker
