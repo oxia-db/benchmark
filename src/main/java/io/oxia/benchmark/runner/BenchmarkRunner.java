@@ -82,7 +82,13 @@ public class BenchmarkRunner {
         Duration duration = workload.duration();
         int parallelism = workload.parallelism();
         int maxOutstanding = workload.maxOutstandingRequests();
-        Semaphore outstanding = new Semaphore(maxOutstanding > 0 ? maxOutstanding : 10_000);
+        if (maxOutstanding <= 0) {
+            maxOutstanding = 10_000;
+        }
+        // Give each worker its own semaphore rather than sharing one: a shared semaphore's atomics
+        // become a contention point under high throughput. The total in-flight cap is split evenly
+        // across the workers.
+        int perThreadOutstanding = Math.max(1, maxOutstanding / parallelism);
 
         // Workers record into DoubleRecorders; the stats loop swaps out interval snapshots
         // atomically (getIntervalHistogram) and accumulates them into the totals, which only
@@ -111,7 +117,7 @@ public class BenchmarkRunner {
                                             seqGen,
                                             running,
                                             warmingUp,
-                                            outstanding,
+                                            perThreadOutstanding,
                                             writeRecorder,
                                             readRecorder,
                                             periodFailedOps,
@@ -210,13 +216,15 @@ public class BenchmarkRunner {
             SequenceGenerator seqGen,
             AtomicBoolean running,
             AtomicBoolean warmingUp,
-            Semaphore outstanding,
+            int perThreadOutstanding,
             DoubleRecorder writeRecorder,
             DoubleRecorder readRecorder,
             LongAdder periodFailedOps,
             LongAdder totalFailedOps) {
 
         byte[] value = new byte[workload.valueSize()];
+        // This worker's own in-flight cap — private to the thread, so no cross-worker contention.
+        Semaphore outstanding = new Semaphore(perThreadOutstanding);
         // targetRate 0 = throughput mode: no pacing, send as fast as the in-flight cap allows.
         boolean rateMode = workload.targetRate() > 0;
         UniformRateLimiter limiter =
