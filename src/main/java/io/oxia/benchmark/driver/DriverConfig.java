@@ -21,7 +21,13 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
 
-public record DriverConfig(String driver, Map<String, Object> config) {
+/**
+ * @param driver which driver implementation to build
+ * @param label optional display name used in results and metrics instead of the driver's own (e.g.
+ *     "oxia-3" vs "oxia-12" to distinguish cluster sizes of the same backend)
+ * @param config driver-specific settings
+ */
+public record DriverConfig(String driver, String label, Map<String, Object> config) {
 
     private static final ObjectMapper YAML = new ObjectMapper(new YAMLFactory());
 
@@ -29,7 +35,8 @@ public record DriverConfig(String driver, Map<String, Object> config) {
     public static DriverConfig load(Path path) throws IOException {
         var map = YAML.readValue(path.toFile(), Map.class);
         String driver = (String) map.get("driver");
+        String label = (String) map.get("label");
         Map<String, Object> config = (Map<String, Object>) map.get("config");
-        return new DriverConfig(driver, config != null ? config : Map.of());
+        return new DriverConfig(driver, label, config != null ? config : Map.of());
     }
 }

@@ -21,6 +21,9 @@ import io.oxia.benchmark.driver.oxia.OxiaDriver;
 import io.oxia.benchmark.driver.redis.RedisDriver;
 import io.oxia.benchmark.driver.tikv.TiKVDriver;
 import io.oxia.benchmark.driver.zookeeper.ZooKeeperDriver;
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 public final class DriverFactory {
 
@@ -38,6 +41,40 @@ public final class DriverFactory {
                     default -> throw new IllegalArgumentException("Unknown driver: " + conf.driver());
                 };
         driver.init(conf.config());
+        if (conf.label() != null && !conf.label().isEmpty()) {
+            return new LabeledDriver(driver, conf.label());
+        }
         return driver;
+    }
+
+    /**
+     * Delegates to the real driver but reports a custom name, so the same backend can appear under
+     * distinct labels in results and metrics (e.g. different cluster sizes).
+     */
+    private record LabeledDriver(KVStoreDriver delegate, String label) implements KVStoreDriver {
+        @Override
+        public String name() {
+            return label;
+        }
+
+        @Override
+        public void init(Map<String, Object> config) throws Exception {
+            delegate.init(config);
+        }
+
+        @Override
+        public CompletableFuture<Void> put(String key, byte[] value) {
+            return delegate.put(key, value);
+        }
+
+        @Override
+        public CompletableFuture<Void> get(String key) {
+            return delegate.get(key);
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
     }
 }
