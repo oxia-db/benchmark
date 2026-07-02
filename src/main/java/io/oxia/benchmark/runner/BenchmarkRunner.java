@@ -19,7 +19,6 @@ import io.oxia.benchmark.driver.KVStoreDriver;
 import io.oxia.benchmark.report.HistogramCodec;
 import io.oxia.benchmark.report.WorkloadResult;
 import io.oxia.benchmark.runner.sequence.SequenceGenerator;
-import io.prometheus.metrics.core.metrics.Histogram;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,32 +36,6 @@ import org.HdrHistogram.DoubleRecorder;
 public class BenchmarkRunner {
 
     private static final long MAX_LATENCY_MICROS = TimeUnit.SECONDS.toMicros(60);
-
-    // Fine-grained buckets for HdrHistogram-style percentile distribution charts.
-    // Native histograms provide exponential buckets for accurate percentile aggregation across
-    // instances.
-    private static final double[] LATENCY_BUCKETS = {
-        .0001, .00025, .0005, .00075, .001, .0025, .005, .0075, .01, .025, .05, .075, .1, .25, .5, .75,
-        1, 2.5, 5, 7.5, 10, 30
-    };
-
-    private static final Histogram opLatency =
-            Histogram.builder()
-                    .name("kv_op_latency_seconds")
-                    .help("Operation latency")
-                    .labelNames("driver", "type", "ok")
-                    .classicUpperBounds(LATENCY_BUCKETS)
-                    .nativeInitialSchema(5)
-                    .register();
-
-    private static final Histogram schedDelay =
-            Histogram.builder()
-                    .name("kv_scheduling_delay_seconds")
-                    .help("Scheduling delay (intended vs actual send time)")
-                    .labelNames("driver", "type")
-                    .classicUpperBounds(LATENCY_BUCKETS)
-                    .nativeInitialSchema(5)
-                    .register();
 
     private final Workload workload;
     private final KVStoreDriver driver;
@@ -231,13 +204,10 @@ public class BenchmarkRunner {
                 rateMode ? new UniformRateLimiter(workload.targetRate() / workload.parallelism()) : null;
 
         while (running.get()) {
-            long intendedSendTime;
             if (rateMode) {
-                intendedSendTime = limiter.acquire();
+                long intendedSendTime = limiter.acquire();
                 UniformRateLimiter.sleepUntil(intendedSendTime);
                 if (!running.get()) break;
-            } else {
-                intendedSendTime = System.nanoTime();
             }
 
             // Bound concurrent in-flight requests (memory cap; the sole throttle in throughput mode).
@@ -255,51 +225,47 @@ public class BenchmarkRunner {
             boolean isWarmup = warmingUp.get();
             long sendTimeNanos = System.nanoTime();
 
-            String key = String.format("k-%016d", seqGen.next());
+            String key = key(seqGen.next());
             boolean isRead = ThreadLocalRandom.current().nextDouble() < workload.readRatio();
-            String opType = isRead ? "read" : "write";
             CompletableFuture<Void> future = isRead ? driver.get(key) : driver.put(key, value);
-
-            if (!isWarmup) {
-                // Record scheduling delay (intended vs actual send time)
-                long sendDelayMicros =
-                        Math.min(
-                                MAX_LATENCY_MICROS,
-                                TimeUnit.NANOSECONDS.toMicros(sendTimeNanos - intendedSendTime));
-                schedDelay.labelValues(driver.name(), opType).observe(sendDelayMicros / 1_000_000.0);
-            }
 
             future.whenComplete(
                     (v, ex) -> {
                         outstanding.release();
                         if (isWarmup) return;
 
-                        // End-to-end latency: actual send time to completion
-                        long latencyMicros =
-                                Math.min(
-                                        MAX_LATENCY_MICROS,
-                                        TimeUnit.NANOSECONDS.toMicros(System.nanoTime() - sendTimeNanos));
-                        double latencyMs = latencyMicros / 1_000.0;
                         if (ex != null) {
                             // Count failures (surfaced in Stats + failedCount); don't log a trace
                             // per op — it floods when a throughput run saturates.
                             periodFailedOps.increment();
                             totalFailedOps.increment();
-                            opLatency
-                                    .labelValues(driver.name(), opType, "false")
-                                    .observe(latencyMicros / 1_000_000.0);
                         } else {
+                            // End-to-end latency: actual send time to completion.
+                            long latencyMicros =
+                                    Math.min(
+                                            MAX_LATENCY_MICROS,
+                                            TimeUnit.NANOSECONDS.toMicros(System.nanoTime() - sendTimeNanos));
+                            double latencyMs = latencyMicros / 1_000.0;
                             if (isRead) {
                                 readRecorder.recordValue(latencyMs);
                             } else {
                                 writeRecorder.recordValue(latencyMs);
                             }
-                            opLatency
-                                    .labelValues(driver.name(), opType, "true")
-                                    .observe(latencyMicros / 1_000_000.0);
                         }
                     });
         }
+    }
+
+    /** Fast equivalent of {@code String.format("k-%016d", n)} for the hot submission path. */
+    private static String key(long n) {
+        char[] c = new char[18];
+        c[0] = 'k';
+        c[1] = '-';
+        for (int i = 17; i >= 2; i--) {
+            c[i] = (char) ('0' + (int) (n % 10));
+            n /= 10;
+        }
+        return new String(c);
     }
 
     private static double safeMax(DoubleHistogram hist) {

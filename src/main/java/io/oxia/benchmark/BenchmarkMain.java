@@ -24,7 +24,6 @@ import io.oxia.benchmark.report.WorkloadResult;
 import io.oxia.benchmark.runner.BenchmarkRunner;
 import io.oxia.benchmark.runner.Workload;
 import io.oxia.benchmark.runner.Workloads;
-import io.prometheus.metrics.exporter.httpserver.HTTPServer;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.file.Files;
@@ -53,12 +52,6 @@ public class BenchmarkMain implements Callable<Integer> {
     private Path workloadsPath;
 
     @Option(
-            names = {"-m", "--metrics-addr"},
-            defaultValue = "0.0.0.0:8080",
-            description = "Metrics service bind address (default: ${DEFAULT-VALUE})")
-    private String metricsAddr;
-
-    @Option(
             names = "--results-dir",
             description = "Directory to write per-workload result files (enables the report pipeline)")
     private Path resultsDir;
@@ -75,12 +68,6 @@ public class BenchmarkMain implements Callable<Integer> {
             return 2;
         }
         try {
-            // Start Prometheus metrics server
-            String[] parts = metricsAddr.split(":");
-            int port = Integer.parseInt(parts[parts.length - 1]);
-            HTTPServer metricsServer = HTTPServer.builder().port(port).buildAndStart();
-            log.infof("Serving Prometheus metrics at http://localhost:%d/metrics", port);
-
             DriverConfig driverConf = DriverConfig.load(driverConfigPath);
             log.info().attr("driverConfig", driverConf).log("Loaded driver configuration");
 
@@ -126,7 +113,6 @@ public class BenchmarkMain implements Callable<Integer> {
                 }
             }
 
-            metricsServer.close();
             return 0;
         } catch (Exception e) {
             log.error().exception(e).log("Benchmark failed");

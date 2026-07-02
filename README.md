@@ -10,7 +10,7 @@ Oxia Benchmark is a versatile and extensible framework for benchmarking distribu
 - **YCSB-Style Workloads:** Run industry-standard [YCSB](https://github.com/brianfrankcooper/YCSB) workload scenarios (A, C, D, X) with configurable read/write ratios, key distributions (uniform, zipf, sequential), and key space sizes.
 - **Extensible Plugin Architecture:** Add support for new key-value stores by implementing the `KVStoreDriver` Java interface, without modifying the core benchmark code.
 - **Kubernetes-Native Deployment:** Deploy the complete benchmark environment — including the systems under test — using Helm charts with pre-configured cluster topologies (3, 6, 12 servers).
-- **Prometheus Metrics:** Monitor benchmark performance in real-time via the built-in Prometheus exporter, with per-operation latency histograms labeled by driver, operation type, and success/failure.
+- **Exact Aggregated Results:** Each worker records latency as an HdrHistogram; the `report` subcommand merges them across workers for exact aggregated percentiles and an HTML report.
 - **Rate-Limited Traffic Generation:** Per-worker token bucket rate limiting ensures precise control over target throughput, independent of system response times.
 
 ## Supported Backends
@@ -135,7 +135,7 @@ In a Kubernetes deployment, the benchmark runs as a distributed system:
 - **Workers** are deployed as Kubernetes Deployments with configurable replica counts. Each worker pod runs an independent instance of the benchmark, generating traffic at the configured target rate. For example, 6 worker replicas each targeting 40,000 ops/s produce an aggregate load of 240,000 ops/s against the cluster.
 - **Workloads** are shared across all workers via a ConfigMap, ensuring consistent test scenarios.
 - **Driver configs** are per-worker, allowing simultaneous benchmarking of different systems (e.g., Oxia, etcd, ZooKeeper) in the same deployment.
-- Each worker exposes Prometheus metrics independently, which can be aggregated for a cluster-wide view.
+- Each worker writes its own result file, which the `report` subcommand merges for a cluster-wide view.
 
 ### Chart Configuration
 
@@ -202,9 +202,9 @@ Key workload parameters:
 
 Multiple workloads can be defined in a single file and will be executed sequentially.
 
-## Monitoring
+## Results
 
-The benchmark tool exposes Prometheus metrics on port `8080` by default at `/metrics`. You can scrape these metrics to monitor the performance of the benchmark in real-time. The metrics address can be changed with the `--metrics-addr` flag.
+Per-worker latency/throughput are collected as HdrHistograms and written to the results directory (`--results-dir`); the `report` subcommand aggregates them into `report.html`. See "Cross-driver comparison".
 
 ## Extending the Benchmark
 
