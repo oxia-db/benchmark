@@ -30,7 +30,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.LongAdder;
 import lombok.CustomLog;
-import org.HdrHistogram.ConcurrentDoubleHistogram;
+import org.HdrHistogram.DoubleHistogram;
+import org.HdrHistogram.DoubleRecorder;
 
 @CustomLog
 public class BenchmarkRunner {
@@ -83,10 +84,17 @@ public class BenchmarkRunner {
         int maxOutstanding = workload.maxOutstandingRequests();
         Semaphore outstanding = new Semaphore(maxOutstanding > 0 ? maxOutstanding : 10_000);
 
-        ConcurrentDoubleHistogram periodWriteHist = new ConcurrentDoubleHistogram(3);
-        ConcurrentDoubleHistogram periodReadHist = new ConcurrentDoubleHistogram(3);
-        ConcurrentDoubleHistogram totalWriteHist = new ConcurrentDoubleHistogram(3);
-        ConcurrentDoubleHistogram totalReadHist = new ConcurrentDoubleHistogram(3);
+        // Workers record into DoubleRecorders; the stats loop swaps out interval snapshots
+        // atomically (getIntervalHistogram) and accumulates them into the totals, which only
+        // this thread touches. Never reset() a histogram that concurrent threads record into:
+        // a record racing a reset corrupts the internal value-scaling ratio, yielding absurd
+        // latencies (~1e242 ms) and silently dropping subsequent samples.
+        DoubleRecorder writeRecorder = new DoubleRecorder(3);
+        DoubleRecorder readRecorder = new DoubleRecorder(3);
+        DoubleHistogram totalWriteHist = new DoubleHistogram(3);
+        DoubleHistogram totalReadHist = new DoubleHistogram(3);
+        DoubleHistogram writeInterval = null;
+        DoubleHistogram readInterval = null;
 
         LongAdder periodFailedOps = new LongAdder();
         LongAdder totalFailedOps = new LongAdder();
@@ -104,10 +112,8 @@ public class BenchmarkRunner {
                                             running,
                                             warmingUp,
                                             outstanding,
-                                            periodWriteHist,
-                                            periodReadHist,
-                                            totalWriteHist,
-                                            totalReadHist,
+                                            writeRecorder,
+                                            readRecorder,
                                             periodFailedOps,
                                             totalFailedOps),
                             "worker-" + i);
@@ -121,12 +127,11 @@ public class BenchmarkRunner {
             log.info().attr("warmup", warmupDuration).log("Warmup started");
             Thread.sleep(warmupDuration.toMillis());
 
-            // End warmup and reset all histograms so cumulative stats are clean
+            // End warmup: drain any straggler samples via an atomic interval swap (safe
+            // against concurrent recording) so cumulative stats start clean.
             warmingUp.set(false);
-            periodWriteHist.reset();
-            periodReadHist.reset();
-            totalWriteHist.reset();
-            totalReadHist.reset();
+            writeRecorder.getIntervalHistogram();
+            readRecorder.getIntervalHistogram();
             periodFailedOps.reset();
             totalFailedOps.reset();
             log.info("Warmup complete, starting measured run");
@@ -134,7 +139,8 @@ public class BenchmarkRunner {
 
         long startNanos = System.nanoTime();
         long endNanos = startNanos + duration.toNanos();
-        long statsIntervalNanos = Duration.ofSeconds(10).toNanos();
+        long statsIntervalNanos =
+                Duration.ofMillis(Long.getLong("benchmark.statsIntervalMs", 10_000)).toNanos();
         long nextStatsNanos = startNanos + statsIntervalNanos;
 
         while (System.nanoTime() < endNanos) {
@@ -145,9 +151,12 @@ public class BenchmarkRunner {
             }
 
             if (System.nanoTime() >= nextStatsNanos) {
-                printStats(periodWriteHist, periodReadHist, periodFailedOps, Duration.ofSeconds(10));
-                periodWriteHist.reset();
-                periodReadHist.reset();
+                writeInterval = writeRecorder.getIntervalHistogram(writeInterval);
+                readInterval = readRecorder.getIntervalHistogram(readInterval);
+                totalWriteHist.add(writeInterval);
+                totalReadHist.add(readInterval);
+                printStats(
+                        writeInterval, readInterval, periodFailedOps, Duration.ofNanos(statsIntervalNanos));
                 periodFailedOps.reset();
                 nextStatsNanos += statsIntervalNanos;
             }
@@ -157,6 +166,12 @@ public class BenchmarkRunner {
         for (Thread worker : workers) {
             worker.join(5000);
         }
+
+        // Fold the final partial interval into the totals.
+        writeInterval = writeRecorder.getIntervalHistogram(writeInterval);
+        readInterval = readRecorder.getIntervalHistogram(readInterval);
+        totalWriteHist.add(writeInterval);
+        totalReadHist.add(readInterval);
 
         long elapsedNanos = System.nanoTime() - startNanos;
         log.info("Cumulative write/read latencies");
@@ -168,8 +183,8 @@ public class BenchmarkRunner {
 
     private WorkloadResult buildResult(
             double measuredSeconds,
-            ConcurrentDoubleHistogram writeHist,
-            ConcurrentDoubleHistogram readHist,
+            DoubleHistogram writeHist,
+            DoubleHistogram readHist,
             LongAdder failedOps) {
         WorkloadResult r = new WorkloadResult();
         r.name = workload.name();
@@ -196,10 +211,8 @@ public class BenchmarkRunner {
             AtomicBoolean running,
             AtomicBoolean warmingUp,
             Semaphore outstanding,
-            ConcurrentDoubleHistogram periodWriteHist,
-            ConcurrentDoubleHistogram periodReadHist,
-            ConcurrentDoubleHistogram totalWriteHist,
-            ConcurrentDoubleHistogram totalReadHist,
+            DoubleRecorder writeRecorder,
+            DoubleRecorder readRecorder,
             LongAdder periodFailedOps,
             LongAdder totalFailedOps) {
 
@@ -269,11 +282,9 @@ public class BenchmarkRunner {
                                     .observe(latencyMicros / 1_000_000.0);
                         } else {
                             if (isRead) {
-                                periodReadHist.recordValue(latencyMs);
-                                totalReadHist.recordValue(latencyMs);
+                                readRecorder.recordValue(latencyMs);
                             } else {
-                                periodWriteHist.recordValue(latencyMs);
-                                totalWriteHist.recordValue(latencyMs);
+                                writeRecorder.recordValue(latencyMs);
                             }
                             opLatency
                                     .labelValues(driver.name(), opType, "true")
@@ -283,19 +294,16 @@ public class BenchmarkRunner {
         }
     }
 
-    private static double safeMax(ConcurrentDoubleHistogram hist) {
+    private static double safeMax(DoubleHistogram hist) {
         return hist.getTotalCount() == 0 ? 0.0 : hist.getMaxValue();
     }
 
-    private static double safePercentile(ConcurrentDoubleHistogram hist, double percentile) {
+    private static double safePercentile(DoubleHistogram hist, double percentile) {
         return hist.getTotalCount() == 0 ? 0.0 : hist.getValueAtPercentile(percentile);
     }
 
     private static void printStats(
-            ConcurrentDoubleHistogram writeHist,
-            ConcurrentDoubleHistogram readHist,
-            LongAdder failedOps,
-            Duration period) {
+            DoubleHistogram writeHist, DoubleHistogram readHist, LongAdder failedOps, Duration period) {
         double periodSec = period.toNanos() / 1_000_000_000.0;
         double writeRate = writeHist.getTotalCount() / periodSec;
         double readRate = readHist.getTotalCount() / periodSec;
