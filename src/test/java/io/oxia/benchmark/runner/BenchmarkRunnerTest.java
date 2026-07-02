@@ -19,13 +19,56 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oxia.benchmark.driver.KVStoreDriver;
+import io.oxia.benchmark.report.HistogramCodec;
+import io.oxia.benchmark.report.WorkloadResult;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.LongAdder;
+import org.HdrHistogram.DoubleHistogram;
 import org.junit.jupiter.api.Test;
 
 class BenchmarkRunnerTest {
+
+    // Regression for the histogram reset/record race. With the old ConcurrentDoubleHistogram +
+    // reset(), a worker's recordValue() landing mid-reset corrupted the internal value-scaling
+    // ratio and produced absurd latencies (~1e242 ms) plus silently dropped later samples. The
+    // stats-interval swap is the exact site the user hit; we drive it every 20ms here (vs the 10s
+    // default) so 8 threads recording flat out race many swaps. With the DoubleRecorder
+    // interval-swap the reported latencies must stay physically sane on every run.
+    @Test
+    void reportedLatenciesStayBoundedAcrossManyStatsIntervals() throws Exception {
+        String prev = System.setProperty("benchmark.statsIntervalMs", "20");
+        try {
+            MockDriver driver = new MockDriver();
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("readRatio", 0.0);
+            map.put("keyspaceSize", 1000);
+            map.put("keyDistribution", "uniform");
+            map.put("valueSize", 8);
+            map.put("targetRate", 0.0); // throughput mode: record as fast as possible
+            map.put("warmup", "50ms"); // also exercise the warmup-boundary interval swap under load
+            map.put("duration", "1s"); // ~50 stats-interval swaps while workers hammer the recorder
+            map.put("parallelism", 8);
+            Workload wl = mapper.convertValue(map, Workload.class);
+
+            WorkloadResult r = new BenchmarkRunner(wl, driver).run();
+
+            DoubleHistogram writeHist = HistogramCodec.decode(r.writeHistB64);
+            assertThat(writeHist.getTotalCount()).isGreaterThan(0);
+            // Mock ops complete inline (sub-ms); a corrupted histogram reports astronomically large
+            // values, so any sane cap well above real latency but far below corruption catches it.
+            assertThat(writeHist.getMaxValue()).isLessThan(1000.0);
+            assertThat(writeHist.getValueAtPercentile(99.9)).isLessThan(1000.0);
+        } finally {
+            if (prev == null) {
+                System.clearProperty("benchmark.statsIntervalMs");
+            } else {
+                System.setProperty("benchmark.statsIntervalMs", prev);
+            }
+        }
+    }
 
     @Test
     void writeOnlyWorkload() throws Exception {
