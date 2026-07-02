@@ -32,9 +32,12 @@ spec:
             - |
               STS_NAME="{{ $stsName }}"
               echo "Waiting for Target Cluster $STS_NAME to be ready..."
+              # Generous timeout: on autoscaled clusters the backend can sit Pending for
+              # minutes while nodes provision; a short wait makes this init container
+              # crash-loop, which the orchestration would misread as unrecoverable.
               kubectl wait sts/$STS_NAME \
                 --for=jsonpath='{.status.readyReplicas}'=$(kubectl get sts $STS_NAME -o jsonpath='{.spec.replicas}') \
-                --timeout=300s
+                --timeout=900s
 
               echo "Sleeping 20s to let cluster bootstrap..."
               sleep 30

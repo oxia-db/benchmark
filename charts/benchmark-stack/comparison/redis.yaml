@@ -1,8 +1,8 @@
-# Redis single-node in-memory (speed-ceiling baseline), scaled for kind. 3 worker pods.
+# Redis single-node in-memory (speed-ceiling baseline), sized for a real cluster (3 CPU / 4Gi). 3 worker pods.
 redis:
   enabled: true
-  cpu: "300m"
-  memory: 512Mi
+  cpu: "3"
+  memory: 4Gi
 
 workers:
   - name: redis-worker

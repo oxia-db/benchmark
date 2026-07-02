@@ -1,4 +1,4 @@
-# etcd (bitnami subchart), single-node, scaled for kind. 3 worker pods.
+# etcd (bitnami subchart), single-node, sized for a real cluster (3 CPU / 4Gi). 3 worker pods.
 etcd:
   enabled: true
   replicaCount: 1
@@ -15,11 +15,11 @@ etcd:
     repository: bitnamilegacy/etcd
   resources:
     requests:
-      cpu: "300m"
-      memory: 512Mi
+      cpu: "3"
+      memory: 4Gi
     limits:
-      cpu: "500m"
-      memory: 768Mi
+      cpu: "3"
+      memory: 4Gi
   preUpgradeJob:
     enabled: false
 

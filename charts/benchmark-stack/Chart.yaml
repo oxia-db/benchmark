@@ -17,7 +17,7 @@ dependencies:
     repository: https://charts.bitnami.com/bitnami
     condition: etcd.enabled
 -   name: oxia-cluster
-    version: 0.0.3
+    version: 0.0.7
     repository: https://oxia-db.github.io/helm-charts/
     condition: oxia-cluster.enabled
 -   name: consul
