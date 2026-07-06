@@ -174,6 +174,7 @@ public class BenchmarkRunner {
         WorkloadResult r = new WorkloadResult();
         r.name = workload.name();
         r.description = workload.description();
+        r.hidden = workload.hidden();
         r.driver = driver.name();
         r.readRatio = workload.readRatio();
         r.keyspaceSize = workload.keyspaceSize();

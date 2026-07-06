@@ -21,10 +21,12 @@ import java.util.Set;
 
 public class Workload {
 
-    private static final Set<String> VALID_DISTRIBUTIONS = Set.of("uniform", "zipf", "order");
+    private static final Set<String> VALID_DISTRIBUTIONS =
+            Set.of("uniform", "zipf", "order", "latest");
 
     @JsonProperty private String name; // optional human label, surfaced in results and the report
     @JsonProperty private String description; // optional longer note, surfaced in the report
+    @JsonProperty private boolean hidden; // if true, still runs but is excluded from the report
     @JsonProperty private double readRatio;
     @JsonProperty private long keyspaceSize;
     @JsonProperty private String keyDistribution;
@@ -44,6 +46,10 @@ public class Workload {
 
     public String description() {
         return description;
+    }
+
+    public boolean hidden() {
+        return hidden;
     }
 
     public double readRatio() {

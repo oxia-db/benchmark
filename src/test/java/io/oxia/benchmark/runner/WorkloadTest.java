@@ -26,22 +26,39 @@ class WorkloadTest {
 
     @Test
     void loadValidWorkloads() throws IOException {
-        Workloads wls = Workloads.load(Path.of("conf/workload-mixed.yaml"));
-        assertThat(wls.items()).hasSize(4);
+        Workloads wls = Workloads.load(Path.of("conf/workload-ycsb.yaml"));
+        assertThat(wls.items()).hasSize(5); // load + YCSB A/B/C/D
         assertThat(wls.exitWhenFinish()).isFalse();
         assertThat(wls.metadata().serverNum()).isEqualTo(1);
     }
 
     @Test
     void firstWorkloadIsInsertOnly() throws IOException {
-        Workloads wls = Workloads.load(Path.of("conf/workload-mixed.yaml"));
+        Workloads wls = Workloads.load(Path.of("conf/workload-ycsb.yaml"));
         Workload first = wls.items().get(0);
         assertThat(first.readRatio()).isEqualTo(0.0);
-        assertThat(first.keyspaceSize()).isEqualTo(10_000_000);
+        assertThat(first.keyspaceSize()).isEqualTo(1_000_000);
         assertThat(first.keyDistribution()).isEqualTo("order");
         assertThat(first.valueSize()).isEqualTo(64);
         assertThat(first.targetRate()).isEqualTo(40_000);
         assertThat(first.parallelism()).isEqualTo(8);
+    }
+
+    @Test
+    void latestDistributionIsValidAndSkewsToNewestKeys() {
+        Workload wl = createWorkload(100, 64, 1000, "10s", 1, 0.95, "latest");
+        wl.validate(); // "latest" is an accepted distribution (YCSB D)
+
+        // Reflected-Zipf latest generator: values cluster near the top of the range.
+        long max = 1000;
+        var gen = io.oxia.benchmark.runner.sequence.SequenceGenerator.create("latest", max);
+        int topHalf = 0;
+        for (int i = 0; i < 10_000; i++) {
+            long k = gen.next();
+            assertThat(k).isBetween(0L, max - 1);
+            if (k >= max / 2) topHalf++;
+        }
+        assertThat(topHalf).isGreaterThan(9_000); // heavily skewed to the newest half
     }
 
     @Test

@@ -109,6 +109,51 @@ class ReportTest {
         assertThat(out.resolve("workload-0-etcd-write.hgrm")).exists();
     }
 
+    @Test
+    void hiddenWorkloadsExcludedFromReport(@TempDir Path tmp) throws Exception {
+        Path results = tmp.resolve("results");
+        Files.createDirectories(results);
+        writeResult(results, "load", 0, true, "oxia", 2.0); // hidden load phase
+        writeResult(results, "wa", 1, false, "oxia", 3.0); // visible workload
+
+        Path out = tmp.resolve("out");
+        int code =
+                new CommandLine(new ReportCommand())
+                        .execute("--results-dir", results.toString(), "-o", out.toString());
+        assertThat(code).isZero();
+
+        JsonNode arr = JSON.readTree(out.resolve("summary.json").toFile());
+        assertThat(arr).hasSize(1); // hidden load phase omitted, only the visible workload remains
+        assertThat(arr.get(0).get("index").asInt()).isEqualTo(1);
+        assertThat(out.resolve("workload-0-oxia-write.hgrm")).doesNotExist();
+        assertThat(out.resolve("workload-1-oxia-write.hgrm")).exists();
+    }
+
+    private void writeResult(
+            Path dir, String id, int index, boolean hidden, String driver, double latencyMs)
+            throws Exception {
+        DoubleHistogram h = new DoubleHistogram(3);
+        for (int i = 0; i < 1_000; i++) {
+            h.recordValue(latencyMs);
+        }
+        WorkloadResult r = new WorkloadResult();
+        r.index = index;
+        r.instanceId = id;
+        r.hidden = hidden;
+        r.driver = driver;
+        r.keyDistribution = "order";
+        r.keyspaceSize = 1000;
+        r.valueSize = 64;
+        r.targetRate = 10_000;
+        r.parallelism = 1;
+        r.duration = "PT10S";
+        r.measuredSeconds = 10.0;
+        r.writeCount = h.getTotalCount();
+        r.writeHistB64 = HistogramCodec.encode(h);
+        r.readHistB64 = HistogramCodec.encode(new DoubleHistogram(3));
+        Files.writeString(dir.resolve(id + ".jsonl"), JSON.writeValueAsString(r) + "\n");
+    }
+
     private void writeWorker(Path dir, String id, String driver, double latencyMs) throws Exception {
         DoubleHistogram h = new DoubleHistogram(3);
         for (int i = 0; i < 10_000; i++) {

@@ -83,6 +83,9 @@ public class ReportCommand implements Callable<Integer> {
         List<Summary> summaries = new ArrayList<>();
         for (Map<String, List<WorkloadResult>> perDriver : byWorkloadDriver.values()) {
             for (List<WorkloadResult> group : perDriver.values()) {
+                if (group.get(0).hidden) {
+                    continue; // hidden workloads (e.g. the load phase) are excluded from the report
+                }
                 DoubleHistogram writeHist = merge(group.stream().map(r -> r.writeHistB64).toList());
                 DoubleHistogram readHist = merge(group.stream().map(r -> r.readHistB64).toList());
                 Summary s = summarize(group, writeHist, readHist);

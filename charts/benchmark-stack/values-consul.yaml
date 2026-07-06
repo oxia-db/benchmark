@@ -3,7 +3,7 @@
 #
 # Install with release name "benchmark" (the worker address below assumes it):
 #   helm install benchmark charts/benchmark-stack -f charts/benchmark-stack/values-consul.yaml \
-#     --set-file workloadsYaml=conf/workload-mixed.yaml
+#     --set-file workloadsYaml=conf/workload-ycsb.yaml
 
 # Consul: 3-server Raft cluster, KV only (no client agents, mesh, UI, or DNS).
 consul:

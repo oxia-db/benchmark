@@ -24,6 +24,7 @@ public interface SequenceGenerator {
             case "uniform" -> new UniformGenerator(maxSequence);
             case "zipf" -> new ZipfGenerator(maxSequence);
             case "order" -> new OrderGenerator(maxSequence);
+            case "latest" -> new LatestGenerator(maxSequence);
             default ->
                     throw new IllegalArgumentException("Unsupported key distribution: " + distribution);
         };
