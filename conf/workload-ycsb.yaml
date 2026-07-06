@@ -1,0 +1,54 @@
+# Standard YCSB core workloads (A, B, C, D), rate-paced for a latency comparison at a fixed target
+# rate. A leading "load" phase populates the 1M keyspace with sequential inserts so the read-heavy
+# phases (B/C/D) hit real data; the same backend keeps its data across phases, so load runs once up
+# front. Latency is the metric of interest here (see workload-ycsb-throughput.yaml for saturation).
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+items:
+  - name: insert-only
+    description: Insert-only load phase — 100% sequential inserts, populates the keyspace
+    hidden: true    # populates the keyspace; excluded from the report
+    readRatio: 0.0
+    keyspaceSize: 1000000
+    keyDistribution: order
+    valueSize: 64
+    targetRate: 40000
+    duration: 60s
+    parallelism: 8
+  - name: YCSB A
+    description: Update heavy — 50% reads, 50% updates, zipfian
+    readRatio: 0.5
+    keyspaceSize: 1000000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 40000
+    duration: 5m
+    parallelism: 8
+  - name: YCSB B
+    description: Read mostly — 95% reads, 5% updates, zipfian
+    readRatio: 0.95
+    keyspaceSize: 1000000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 40000
+    duration: 5m
+    parallelism: 8
+  - name: YCSB C
+    description: Read only — 100% reads, zipfian
+    readRatio: 1.0
+    keyspaceSize: 1000000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 40000
+    duration: 5m
+    parallelism: 8
+  - name: YCSB D
+    description: Read latest — 95% reads skewed to newest keys, 5% writes, latest distribution
+    readRatio: 0.95
+    keyspaceSize: 1000000
+    keyDistribution: latest
+    valueSize: 64
+    targetRate: 40000
+    duration: 5m
+    parallelism: 8

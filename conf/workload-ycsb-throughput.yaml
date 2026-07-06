@@ -1,36 +1,36 @@
-# YCSB-style workloads in max-throughput mode: no targetRate, so each phase sends as fast as
-# possible bounded by maxOutstandingRequests (the in-flight cap). Latency is irrelevant here —
-# the report shows achieved ops/s per backend (no latency chart for targetRate=0 workloads).
-# Small keyspace (like workload-comparison.yaml) so the insert phase fully covers it on every
-# backend and the update/read phases never touch missing keys.
+# YCSB core workloads (A, B, C, D) in max-throughput mode: no targetRate, so each phase sends as
+# fast as possible bounded by maxOutstandingRequests (the in-flight cap). A leading "load" phase
+# populates the 1M keyspace with sequential inserts so the read-heavy phases (B/C/D) hit real data.
+# The report shows achieved ops/s per backend (no latency chart for targetRate=0 workloads).
 exitWhenFinish: false
 metadata:
   serverNum: 1
 items:
   - name: insert-only
-    description: 100% writes, sequential keys, max throughput
+    description: Insert-only load phase — 100% sequential inserts, populates the keyspace, max throughput
+    hidden: true    # populates the keyspace; excluded from the report
     readRatio: 0.0
-    keyspaceSize: 10000
+    keyspaceSize: 1000000
     keyDistribution: order
     valueSize: 64
     duration: 60s
     warmup: 10s
     parallelism: 8
     maxOutstandingRequests: 10000
-  - name: YCSB X
-    description: 100% updates, zipf distribution, max throughput
-    readRatio: 0.0
-    keyspaceSize: 10000
+  - name: YCSB A
+    description: Update heavy — 50% reads, 50% updates, zipfian, max throughput
+    readRatio: 0.5
+    keyspaceSize: 1000000
     keyDistribution: zipf
     valueSize: 64
     duration: 60s
     warmup: 10s
     parallelism: 8
     maxOutstandingRequests: 10000
-  - name: YCSB A
-    description: 50% updates, 50% reads, zipf distribution, max throughput
-    readRatio: 0.5
-    keyspaceSize: 10000
+  - name: YCSB B
+    description: Read mostly — 95% reads, 5% updates, zipfian, max throughput
+    readRatio: 0.95
+    keyspaceSize: 1000000
     keyDistribution: zipf
     valueSize: 64
     duration: 60s
@@ -38,10 +38,20 @@ items:
     parallelism: 8
     maxOutstandingRequests: 10000
   - name: YCSB C
-    description: 100% reads, zipf distribution, max throughput
+    description: Read only — 100% reads, zipfian, max throughput
     readRatio: 1.0
-    keyspaceSize: 10000
+    keyspaceSize: 1000000
     keyDistribution: zipf
+    valueSize: 64
+    duration: 60s
+    warmup: 10s
+    parallelism: 8
+    maxOutstandingRequests: 10000
+  - name: YCSB D
+    description: Read latest — 95% reads skewed to newest keys, 5% writes, latest distribution, max throughput
+    readRatio: 0.95
+    keyspaceSize: 1000000
+    keyDistribution: latest
     valueSize: 64
     duration: 60s
     warmup: 10s

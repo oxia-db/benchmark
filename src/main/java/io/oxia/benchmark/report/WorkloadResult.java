@@ -32,6 +32,7 @@ public class WorkloadResult {
 
     public String name; // optional workload label from config
     public String description; // optional workload description from config
+    public boolean hidden; // if true, excluded from the aggregated report
 
     public String driver;
     public double readRatio;

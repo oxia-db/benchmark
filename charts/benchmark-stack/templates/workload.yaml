@@ -4,6 +4,6 @@ metadata:
   name: {{ .Release.Name }}-workloads-config
 data:
   # Workload definitions live only under conf/. Provide the chosen file at install time:
-  #   --set-file workloadsYaml=conf/workload-mixed.yaml
+  #   --set-file workloadsYaml=conf/workload-ycsb.yaml
   workloads.yaml: |
 {{ .Values.workloadsYaml | required "workloadsYaml is required: pass --set-file workloadsYaml=conf/<workload>.yaml" | indent 4 }}

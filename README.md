@@ -75,7 +75,7 @@ make test
 To execute a benchmark, you need to provide a driver configuration file and a workload configuration file.
 
 ```bash
-java -jar build/libs/oxia-benchmark-*-all.jar --driver-config conf/driver-oxia.yaml --workloads conf/workload-mixed.yaml
+java -jar build/libs/oxia-benchmark-*-all.jar --driver-config conf/driver-oxia.yaml --workloads conf/workload-ycsb.yaml
 ```
 
 Example output:
@@ -100,7 +100,7 @@ workload, with the latency distribution serialized as a compressed HdrHistogram:
 
 ```bash
 java -jar build/libs/oxia-benchmark-*-all.jar \
-  --driver-config conf/driver-oxia.yaml --workloads conf/workload-mixed.yaml \
+  --driver-config conf/driver-oxia.yaml --workloads conf/workload-ycsb.yaml \
   --results-dir results --instance-id "$(hostname)"
 ```
 
@@ -149,7 +149,7 @@ The chart is configured using values files. There are several pre-configured val
 
 You can customize these values files to match your requirements. For example, to disable the deployment of a specific system, set the `enabled` flag to `false` in the corresponding section.
 
-The **workload** to run is not part of the values files — it is supplied at install time from a file under `conf/` via `--set-file workloadsYaml=conf/<file>.yaml`, so workload definitions live in one place and are never duplicated. Use `conf/workload-mixed.yaml` (the standard YCSB-style set), `conf/workload-test.yaml` (a quick single-workload smoke), `conf/workload-comparison.yaml` (the cross-driver write/read pair), or your own.
+The **workload** to run is not part of the values files — it is supplied at install time from a file under `conf/` via `--set-file workloadsYaml=conf/<file>.yaml`, so workload definitions live in one place and are never duplicated. Use `conf/workload-ycsb.yaml` (the standard YCSB-style set), `conf/workload-test.yaml` (a quick single-workload smoke), `conf/workload-comparison.yaml` (the cross-driver write/read pair), or your own.
 
 ### Deploying the Benchmark
 
@@ -160,7 +160,7 @@ Example for deploying the Oxia benchmark with a 3-server cluster:
 ```bash
 helm install benchmark charts/benchmark-stack \
   -f charts/benchmark-stack/values-3-server.yaml \
-  --set-file workloadsYaml=conf/workload-mixed.yaml \
+  --set-file workloadsYaml=conf/workload-ycsb.yaml \
   --set zookeeper.enabled=false \
   --set etcd.enabled=false
 ```
@@ -188,7 +188,7 @@ The driver configuration specifies the target system to benchmark. Configuration
 
 ### Workload Configuration
 
-The workload configuration defines the benchmark scenarios. See `conf/workload-mixed.yaml` for an example.
+The workload configuration defines the benchmark scenarios. See `conf/workload-ycsb.yaml` for an example.
 
 Key workload parameters:
 
