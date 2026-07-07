@@ -1,3 +1,6 @@
+# For the session/ephemeral experiments (conf/session-*.yaml), make sure the ZooKeeper server's
+# tickTime admits the chosen session timeout: the negotiated timeout is clamped to [2*tickTime,
+# 20*tickTime]. The default 2s tick admits the default 10s timeout; lower tickTime for a shorter one.
 driver: zookeeper
 config:
   servers:

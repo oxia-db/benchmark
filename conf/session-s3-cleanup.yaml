@@ -1,0 +1,48 @@
+# S3 — Cleanup-visibility latency: how long past the contractual deadline until an expired session's
+# ephemerals actually disappear?
+#
+# With N background sessions live, one client is killed abruptly (heartbeats stop, transport torn down
+# with no goodbye). The harness records t_hb (the kill instant — an upper bound on the last heartbeat
+# actually sent); an observer records t_gone (first read returning absent) and t_notify (deletion
+# delivered on the native watch/notification feed). The headline metric is
+#   EXCESS = t_notify - (t_hb + timeout)
+# the latency beyond the contractual deadline. We also emit t_notify - t_gone (dispatch latency).
+#
+# Each experiment runs >=100 trials at idle and then >=100 under ~80% foreground load (set
+# foregroundRate to ~80% of saturation). One CSV row per trial, so a CDF plots directly.
+exitWhenFinish: true
+items:
+  - name: S3 cleanup k=1
+    description: Cleanup-visibility EXCESS latency, 1 ephemeral/session, idle + ~80% load
+    type: S3
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    backgroundSessions: 50000
+    trials: 100
+    settleTimeout: 30s
+    foregroundRate: 32000        # ~80% of saturation — tune per system
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 8
+  - name: S3 cleanup k=10
+    description: Cleanup-visibility EXCESS latency, 10 ephemerals/session, idle + ~80% load
+    type: S3
+    sessionTimeout: 10s
+    ephemeralsPerSession: 10
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    backgroundSessions: 50000
+    trials: 100
+    settleTimeout: 30s
+    foregroundRate: 32000
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 8

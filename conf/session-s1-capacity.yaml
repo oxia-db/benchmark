@@ -1,0 +1,49 @@
+# S1 — Session capacity: how many live sessions can a system hold before the foreground suffers?
+#
+# A fixed YCSB-A-style foreground load runs at ~50% of the system's own saturation while the live
+# session count N is swept. We measure foreground throughput and p99 vs N, plus the client-side
+# footprint (sockets/threads/heap) per 10k sessions. Headline: the max N with <5% foreground
+# degradation vs the N=0 baseline.
+#
+# foregroundRate is the ~50%-saturation operating point. It differs per system (each backend has a
+# different saturation), so tune it per driver from the throughput workload's measured max — the
+# value here is a starting point. Everything session-related (timeout, heartbeat=timeout/3, k) is
+# identical across systems for fairness.
+#
+# NOTE: N=500k is spread across worker instances (see the Helm chart); a single worker should not be
+# asked to hold 500k sockets. Scale worker replicas so per-worker N stays within the process's fd and
+# thread limits.
+exitWhenFinish: true
+items:
+  - name: S1 capacity k=1
+    description: Live-session capacity under 50%-saturation YCSB-A foreground, 1 ephemeral/session
+    type: S1
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    holdDuration: 60s
+    foregroundRate: 20000        # ~50% of saturation — tune per system
+    foregroundReadRatio: 0.5     # YCSB-A
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 8
+    sessionsSweep: [10000, 50000, 100000, 500000]
+  - name: S1 capacity k=10
+    description: Live-session capacity under 50%-saturation YCSB-A foreground, 10 ephemerals/session
+    type: S1
+    sessionTimeout: 10s
+    ephemeralsPerSession: 10
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    holdDuration: 60s
+    foregroundRate: 20000
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 8
+    sessionsSweep: [10000, 50000, 100000, 500000]

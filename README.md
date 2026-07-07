@@ -206,6 +206,57 @@ Multiple workloads can be defined in a single file and will be executed sequenti
 
 Per-worker latency/throughput are collected as HdrHistograms and written to the results directory (`--results-dir`); the `report` subcommand aggregates them into `report.html`. See "Cross-driver comparison".
 
+## Session & Ephemeral Experiments
+
+Beyond the KV workloads, the benchmark includes a session/ephemeral suite that stresses the part of a coordination store the YCSB workloads never touch: **sessions** (a client's liveness lease, kept alive by heartbeats) and **ephemeral keys** (keys that exist only while their session does). These are what applications rely on for leader election, membership, locks, and service discovery, and their cost and cleanup behavior — especially under mass client failure — is a first-order property of a coordination system. The suite drives Oxia, ZooKeeper, and etcd through a common `SessionDriver` interface and feeds the Oxia paper's evaluation (SoCC '26) and the extended benchmark report.
+
+Run an experiment file with `--session-experiments` instead of `--workloads`:
+
+```bash
+java -jar build/libs/oxia-benchmark-*-all.jar \
+  --driver-config conf/driver-oxia.yaml \
+  --session-experiments conf/session-s1-capacity.yaml \
+  --results-dir results --instance-id "$(hostname)"
+
+# Aggregate the per-worker *-session.jsonl files into per-experiment CSV + JSON:
+java -jar build/libs/oxia-benchmark-*-all.jar session-report --results-dir results --out report
+```
+
+`conf/session-test.yaml` is a fast single-node smoke covering all four experiments; `conf/session-s1-capacity.yaml`, `-s2-churn.yaml`, `-s3-cleanup.yaml`, `-s4-storm.yaml` are the full-scale definitions.
+
+### The four experiments
+
+| ID | Name | What it does | Headline metric | Output |
+|----|------|--------------|-----------------|--------|
+| **S1** | Capacity | Fixed YCSB-A-style foreground load at ~50% of the system's own saturation; sweep live sessions N = 10k/50k/100k/500k | Max N with **<5% foreground throughput degradation**; foreground p99 and client footprint vs N | Time series (`session-s1.csv`) + headline (`session-s1-headline.csv`) |
+| **S2** | Churn | Steady *r* sessions/s established (create + write *k* ephemerals) and *r* departing; sweep *r* to the latency knee; departure = graceful close **or** abandon (server-side expiry) | Max sustainable churn; p99 session-establish latency vs *r* | Per-rate rows (`session-s2.csv`) + headline (`session-s2-headline.csv`) |
+| **S3** | Cleanup-visibility | With N background sessions live, kill one client abruptly; observe when its ephemerals disappear | **EXCESS = t_notify − (t_hb + timeout)** — latency *beyond* the contractual deadline; also dispatch = t_notify − t_gone. ≥100 trials at idle and at ~80% load | One row per trial (`session-s3.csv`), CDF-ready |
+| **S4** | Expiry storm | 100k live sessions (*k* ephemerals each); kill 10% / 50% / 100% of clients simultaneously | Cleanup completion curve (fraction of ephemerals deleted vs time, sub-second) and foreground throughput/p99 over the same timeline | Time series per kill fraction (`session-s4.csv`) |
+
+Every experiment carries *k* attached ephemeral keys per session; the shipped configs run both **k=1** and **k=10**.
+
+For S3, **t_hb** is recorded as the instant the harness stops heartbeating the session. This is an *upper bound* on the last heartbeat actually delivered (the true last heartbeat is at most one heartbeat interval — `timeout/3` — earlier), so the reported EXCESS is a slight under-estimate of the true post-deadline latency, uniformly across all systems.
+
+### Semantics mapping per system
+
+A "session with *k* ephemeral keys" maps to each system's native primitive:
+
+| Operation | Oxia | ZooKeeper | etcd |
+|-----------|------|-----------|------|
+| Session | One `AsyncOxiaClient` (SDK KeepAlive heartbeats) | One `ZooKeeper` handle = one session per TCP connection (ZK's model, kept as-is) | One lease with a TTL, renewed by a `LeaseKeepAlive` stream |
+| Ephemeral key | `put(..., AsEphemeralRecord)` | Ephemeral znode | `put(..., withLeaseId)` |
+| Graceful close | `client.close()` (CloseSession) | `ZooKeeper.close()` | Lease revoke |
+| Abrupt kill | Cancel KeepAlive + drop gRPC channel via SDK internals — no CloseSession | `ClientCnxn.disconnect()`: close the socket **without** `close()` (which would end the session gracefully and skip expiry) | Stop the keep-alive stream, no revoke; lease lapses after TTL |
+| Watch prefix | `notifications()` global feed, filtered by prefix client-side | Classic child watch with **re-registration**, diffing the child set | Native prefix watch |
+
+### Fairness rules
+
+The suite is built to make the comparison honest, not flattering:
+
+- **Identical timeout and heartbeat everywhere.** The session timeout (default 10s) and heartbeat cadence (`timeout/3`) come from the shared experiment YAML and are applied to every backend, so no system gets a slower-heartbeat or longer-grace advantage. Configure the ZooKeeper server `tickTime` so its min/max session bounds (2·tick .. 20·tick) admit the chosen timeout — 10s is fine with the default 2s tick.
+- **Closest contract-equivalent recipe, difference disclosed.** Where a system can't express an operation natively, the nearest equivalent is used and the gap is stated, not hidden. The disclosed differences: etcd multiplexes every lease over one shared client (no per-session socket), so its abrupt kill stops the keep-alive stream rather than dropping a socket; Oxia's notification feed has no server-side prefix scoping, so prefixes are filtered client-side; ZooKeeper's child watch reports only *that* children changed, so identifying *which* key was removed costs an extra read (reflected in the measured latency); Oxia's abrupt kill reaches SDK internals reflectively (pinned to the client version in `build.gradle.kts`) because the public API offers only a graceful close.
+- **Client-side costs are measured, not hidden.** Sessions are async state machines in a pool (never a thread per session), and large session counts are spread across worker instances so no single process needs excessive sockets. The client footprint — **sockets, threads, and heap MB per 10k sessions** — is reported as a first-class metric (S1), so the per-session cost of ZooKeeper's and Oxia's connection-per-session model versus etcd's lease multiplexing is visible rather than assumed.
+
 ## Extending the Benchmark
 
 To add support for a new key-value store:
