@@ -30,11 +30,11 @@ import org.HdrHistogram.DoubleHistogram;
 import org.HdrHistogram.DoubleRecorder;
 
 /**
- * Runs one {@link SessionExperiment} (S1 capacity, S2 churn) against a {@link SessionDriver} and
- * returns a {@link SessionResult}. The orchestration runs synchronously on this one thread and
- * drives thousands of sessions through the async {@link SessionPool}; the sessions themselves are
- * never thread-backed. Every experiment uses the identical session timeout and ephemeral count from
- * the config, so results are comparable across backends.
+ * Runs one {@link SessionExperiment} ({@code capacity} or {@code churn}) against a {@link
+ * SessionDriver} and returns a {@link SessionResult}. The orchestration runs synchronously on this
+ * one thread and drives thousands of sessions through the async {@link SessionPool}; the sessions
+ * themselves are never thread-backed. Every experiment uses the identical session timeout and
+ * ephemeral count from the config, so results are comparable across backends.
  */
 @CustomLog
 public class SessionExperimentRunner {
@@ -69,8 +69,8 @@ public class SessionExperimentRunner {
         r.ephemeralsPerSession = exp.ephemeralsPerSession();
 
         switch (exp.type()) {
-            case "S1" -> runCapacity(r);
-            case "S2" -> runChurn(r);
+            case "capacity" -> runCapacity(r);
+            case "churn" -> runChurn(r);
             default -> throw new IllegalArgumentException("unknown experiment type: " + exp.type());
         }
         return r;
@@ -92,7 +92,7 @@ public class SessionExperimentRunner {
                 exp.foregroundParallelism());
     }
 
-    // ---- S1 capacity ----------------------------------------------------------------------------
+    // ---- capacity -------------------------------------------------------------------------------
 
     private void runCapacity(SessionResult r) {
         r.capacity = new ArrayList<>();
@@ -111,7 +111,7 @@ public class SessionExperimentRunner {
         log.info()
                 .attr("baselineThroughput", String.format("%.0f", baseline))
                 .attr("baselineP99", String.format("%.1f", base.p99()))
-                .log("S1 baseline (N=0) measured");
+                .log("Capacity baseline (N=0) measured");
 
         for (long n : exp.sessionsSweep()) {
             pool.rampTo(n, concurrency);
@@ -129,7 +129,7 @@ public class SessionExperimentRunner {
                     .attr("degradationPct", String.format("%.1f", degradation))
                     .attr("threadsPer10k", per10k.threads())
                     .attr("heapMBPer10k", String.format("%.1f", per10k.heapMB()))
-                    .log("S1 sweep point");
+                    .log("Capacity sweep point");
         }
         fg.stop();
         pool.closeAll(concurrency);
@@ -151,7 +151,7 @@ public class SessionExperimentRunner {
         return p;
     }
 
-    // ---- S2 churn -------------------------------------------------------------------------------
+    // ---- churn ----------------------------------------------------------------------------------
 
     private void runChurn(SessionResult r) {
         r.churn = new ArrayList<>();
@@ -248,7 +248,7 @@ public class SessionExperimentRunner {
                 .attr("achieved", String.format("%.0f", p.achievedCreateRate))
                 .attr("establishP99ms", String.format("%.1f", p.establishP99))
                 .attr("sustained", p.sustained)
-                .log("S2 churn rate point");
+                .log("Churn rate point");
         return p;
     }
 

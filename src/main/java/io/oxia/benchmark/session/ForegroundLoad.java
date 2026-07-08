@@ -32,10 +32,9 @@ import org.HdrHistogram.DoubleRecorder;
 
 /**
  * A controllable, rate-paced foreground load — the YCSB-A-style traffic that runs
- * <em>alongside</em> the sessions in S1 (capacity), S3 (load condition), and S4 (storm timeline).
- * It is the session suite's analogue of {@code BenchmarkRunner}'s traffic loop, but
- * startable/stoppable and pollable for interval throughput and p99 so the runner can watch how
- * session activity perturbs it.
+ * <em>alongside</em> the sessions in the capacity experiment. It is the session suite's analogue of
+ * {@code BenchmarkRunner}'s traffic loop, but startable/stoppable and pollable for interval
+ * throughput and p99 so the runner can watch how session activity perturbs it.
  */
 public class ForegroundLoad {
 

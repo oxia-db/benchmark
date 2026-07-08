@@ -34,17 +34,13 @@ class SessionExperimentConfigTest {
 
     @ParameterizedTest
     @ValueSource(
-            strings = {
-                "conf/session-s1-capacity.yaml",
-                "conf/session-s2-churn.yaml",
-                "conf/session-test.yaml"
-            })
+            strings = {"conf/session-capacity.yaml", "conf/session-churn.yaml", "conf/session-test.yaml"})
     void shippedConfigsParseAndValidate(String file) throws Exception {
         SessionExperiments experiments = SessionExperiments.load(Path.of(file));
         assertThat(experiments.items()).isNotEmpty();
         // load() has already applied defaults and validated; assert the fairness knobs are set.
         for (SessionExperiment e : experiments.items()) {
-            assertThat(e.type()).isIn("S1", "S2");
+            assertThat(e.type()).isIn("capacity", "churn");
             assertThat(e.sessionTimeout()).isGreaterThan(Duration.ZERO);
             assertThat(e.ephemeralsPerSession()).isGreaterThanOrEqualTo(1);
         }
@@ -53,7 +49,7 @@ class SessionExperimentConfigTest {
     @Test
     void appliesDefaults() {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S2");
+        map.put("type", "churn");
         map.put("churnRateSweep", List.of(100.0));
         SessionExperiment e = MAPPER.convertValue(map, SessionExperiment.class);
         e.applyDefaults();
@@ -68,21 +64,21 @@ class SessionExperimentConfigTest {
 
     @Test
     void rejectsUnknownType() {
-        SessionExperiment e = experiment(Map.of("type", "S9"));
+        SessionExperiment e = experiment(Map.of("type", "bogus"));
         assertThatThrownBy(e::validate).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void rejectsS1WithoutSweep() {
-        SessionExperiment e = experiment(Map.of("type", "S1", "foregroundRate", 1000));
+    void rejectsCapacityWithoutSweep() {
+        SessionExperiment e = experiment(Map.of("type", "capacity", "foregroundRate", 1000));
         assertThatThrownBy(e::validate)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("sessionsSweep");
     }
 
     @Test
-    void rejectsS2WithoutSweep() {
-        SessionExperiment e = experiment(Map.of("type", "S2"));
+    void rejectsChurnWithoutSweep() {
+        SessionExperiment e = experiment(Map.of("type", "churn"));
         assertThatThrownBy(e::validate)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("churnRateSweep");

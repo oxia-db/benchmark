@@ -29,9 +29,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * An in-memory {@link SessionDriver} that emulates real session semantics well enough to test the
- * pool and the S1/S2 runner deterministically: ephemeral keys become visible on put, a graceful
- * close removes them at once, and an abrupt kill schedules their removal after the session timeout
- * — the server-side expiry path. No real cluster needed.
+ * pool and the capacity/churn runner deterministically: ephemeral keys become visible on put, a
+ * graceful close removes them at once, and an abrupt kill schedules their removal after the session
+ * timeout — the server-side expiry path. No real cluster needed.
  */
 class MockSessionDriver implements SessionDriver {
 

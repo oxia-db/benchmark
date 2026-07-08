@@ -35,9 +35,9 @@ class SessionExperimentRunnerTest {
     }
 
     @Test
-    void s1SweepsSessionsAndMeasuresForegroundPerPoint() throws Exception {
+    void capacitySweepsSessionsAndMeasuresForegroundPerPoint() throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S1");
+        map.put("type", "capacity");
         map.put("sessionTimeout", "1s");
         map.put("ephemeralsPerSession", 2);
         map.put("createConcurrency", 16);
@@ -50,7 +50,7 @@ class SessionExperimentRunnerTest {
 
         SessionResult r = run(map);
 
-        assertThat(r.type).isEqualTo("S1");
+        assertThat(r.type).isEqualTo("capacity");
         // Baseline (N=0) plus one point per sweep entry.
         assertThat(r.capacity).hasSize(3);
         assertThat(r.capacity.get(0).sessions).isZero();
@@ -62,9 +62,9 @@ class SessionExperimentRunnerTest {
     }
 
     @Test
-    void s2SustainsChurnAndRecordsEstablishLatency() throws Exception {
+    void churnSustainsRateAndRecordsEstablishLatency() throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S2");
+        map.put("type", "churn");
         map.put("sessionTimeout", "1s");
         map.put("ephemeralsPerSession", 1);
         map.put("createConcurrency", 32);
@@ -76,7 +76,7 @@ class SessionExperimentRunnerTest {
 
         SessionResult r = run(map);
 
-        assertThat(r.type).isEqualTo("S2");
+        assertThat(r.type).isEqualTo("churn");
         assertThat(r.departure).isEqualTo("graceful");
         assertThat(r.churn).hasSize(1);
         SessionResult.ChurnPoint p = r.churn.get(0);
@@ -89,9 +89,9 @@ class SessionExperimentRunnerTest {
     }
 
     @Test
-    void s2AbandonLeavesKeysToExpireServerSide() throws Exception {
+    void churnAbandonLeavesKeysToExpireServerSide() throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S2");
+        map.put("type", "churn");
         map.put("sessionTimeout", "200ms");
         map.put("ephemeralsPerSession", 1);
         map.put("createConcurrency", 32);

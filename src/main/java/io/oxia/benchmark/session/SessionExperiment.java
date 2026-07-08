@@ -22,19 +22,19 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * One session/ephemeral experiment (S1 capacity, S2 churn). The common fields fix the fairness
- * knobs shared by every backend — identical session timeout, ephemerals-per-session ({@code k}),
- * and key namespace; the per-type fields drive the sweep. Several experiments can be listed in one
- * file and run sequentially, exactly like {@link Workload}s.
+ * One session/ephemeral experiment ({@code capacity} or {@code churn}). The common fields fix the
+ * fairness knobs shared by every backend — identical session timeout, ephemerals-per-session
+ * ({@code k}), and key namespace; the per-type fields drive the sweep. Several experiments can be
+ * listed in one file and run sequentially, exactly like {@link Workload}s.
  */
 public class SessionExperiment {
 
-    private static final Set<String> VALID_TYPES = Set.of("S1", "S2");
+    private static final Set<String> VALID_TYPES = Set.of("capacity", "churn");
     private static final Set<String> VALID_DEPARTURES = Set.of("graceful", "abandon");
 
     @JsonProperty private String name;
     @JsonProperty private String description;
-    @JsonProperty private String type; // S1 | S2
+    @JsonProperty private String type; // capacity | churn
 
     // ---- shared session parameters (identical across systems for fairness) ----------------------
     @JsonProperty private String sessionTimeout; // default 10s
@@ -44,7 +44,7 @@ public class SessionExperiment {
     @JsonProperty private int createConcurrency; // max in-flight session establishes
     @JsonProperty private String warmup;
 
-    // ---- foreground load (S1) --------------------------------------------------------------------
+    // ---- foreground load (capacity) --------------------------------------------------------------
     @JsonProperty private double foregroundRate; // ops/s per worker at the measured operating point
     @JsonProperty private double foregroundReadRatio; // YCSB-A-style default 0.5
     @JsonProperty private long foregroundKeyspaceSize;
@@ -52,11 +52,11 @@ public class SessionExperiment {
     @JsonProperty private int foregroundValueSize;
     @JsonProperty private int foregroundParallelism;
 
-    // ---- S1 capacity ----------------------------------------------------------------------------
+    // ---- capacity -------------------------------------------------------------------------------
     @JsonProperty private List<Long> sessionsSweep; // live-session counts N
-    @JsonProperty private String holdDuration; // measure window per sweep point (S1/S2)
+    @JsonProperty private String holdDuration; // measure window per sweep point (both types)
 
-    // ---- S2 churn -------------------------------------------------------------------------------
+    // ---- churn ----------------------------------------------------------------------------------
     @JsonProperty private List<Double> churnRateSweep; // sessions/s r
     @JsonProperty private String departure; // graceful | abandon
 
@@ -186,18 +186,18 @@ public class SessionExperiment {
             throw new IllegalArgumentException("departure must be one of " + VALID_DEPARTURES);
         }
         switch (type) {
-            case "S1" -> {
+            case "capacity" -> {
                 if (sessionsSweep().isEmpty()) {
-                    throw new IllegalArgumentException("S1 requires a non-empty sessionsSweep");
+                    throw new IllegalArgumentException("capacity requires a non-empty sessionsSweep");
                 }
                 if (foregroundRate <= 0) {
                     throw new IllegalArgumentException(
-                            "S1 requires foregroundRate > 0 (the operating point)");
+                            "capacity requires foregroundRate > 0 (the operating point)");
                 }
             }
-            case "S2" -> {
+            case "churn" -> {
                 if (churnRateSweep().isEmpty()) {
-                    throw new IllegalArgumentException("S2 requires a non-empty churnRateSweep");
+                    throw new IllegalArgumentException("churn requires a non-empty churnRateSweep");
                 }
             }
             default -> throw new IllegalArgumentException("unsupported type: " + type);

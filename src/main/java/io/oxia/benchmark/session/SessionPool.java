@@ -31,8 +31,9 @@ import lombok.CustomLog;
  * A pool of live sessions run as async state machines — never a thread per session. Each session's
  * lifecycle (establish → live+heartbeating → close/kill) is driven by the backend's own async ops;
  * the pool tracks live handles and fans work out with bounded concurrency via {@link AsyncBatch}.
- * "Establish" is create-session + attach {@code k} ephemeral keys — the unit whose latency S2
- * measures. Keys derive deterministically from the session id via {@link SessionKeys}.
+ * "Establish" is create-session + attach {@code k} ephemeral keys — the unit whose latency the
+ * churn experiment measures. Keys derive deterministically from the session id via {@link
+ * SessionKeys}.
  */
 @CustomLog
 public class SessionPool {

@@ -1,4 +1,4 @@
-# S1 — Session capacity: how many live sessions can a system hold before the foreground suffers?
+# Session capacity: how many live sessions can a system hold before the foreground suffers?
 #
 # A fixed YCSB-A-style foreground load runs at ~50% of the system's own saturation while the live
 # session count N is swept. We measure foreground throughput and p99 vs N, plus the client-side
@@ -15,9 +15,9 @@
 # thread limits.
 exitWhenFinish: true
 items:
-  - name: S1 capacity k=1
+  - name: capacity k=1
     description: Live-session capacity under 50%-saturation YCSB-A foreground, 1 ephemeral/session
-    type: S1
+    type: capacity
     sessionTimeout: 10s
     ephemeralsPerSession: 1
     ephemeralValueSize: 16
@@ -31,9 +31,9 @@ items:
     foregroundValueSize: 64
     foregroundParallelism: 8
     sessionsSweep: [10000, 50000, 100000, 500000]
-  - name: S1 capacity k=10
+  - name: capacity k=10
     description: Live-session capacity under 50%-saturation YCSB-A foreground, 10 ephemerals/session
-    type: S1
+    type: capacity
     sessionTimeout: 10s
     ephemeralsPerSession: 10
     ephemeralValueSize: 16

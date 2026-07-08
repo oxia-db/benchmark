@@ -179,7 +179,7 @@ public class ZooKeeperDriver implements SessionDriver {
     @Override
     public CompletableFuture<SessionHandle> createSession(long logicalId, Duration timeout) {
         // A ZK session is a connection; establishing it is inherently blocking on the SyncConnected
-        // event, so do it off the pool thread. Session-establish latency (S2) is measured around this.
+        // event, so do it off the pool thread. Churn-establish latency is measured around this.
         CompletableFuture<SessionHandle> future = new CompletableFuture<>();
         blockingIo.execute(
                 () -> {

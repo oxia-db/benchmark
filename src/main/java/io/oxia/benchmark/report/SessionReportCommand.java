@@ -34,9 +34,9 @@ import picocli.CommandLine.Option;
 /**
  * Aggregates the per-worker session-experiment result files (one JSONL line each, {@link
  * SessionResult}) into chart-ready CSV plus a raw JSON dump — the session-suite analogue of {@code
- * ReportCommand}. Each experiment type flattens to its own CSV (S1 capacity sweep, S2 churn sweep).
- * Rows keep {@code instanceId}, so cluster-level roll-ups (e.g. summing foreground throughput
- * across workers) are a groupby away in the analysis.
+ * ReportCommand}. Each experiment type flattens to its own CSV (capacity sweep, churn sweep). Rows
+ * keep {@code instanceId}, so cluster-level roll-ups (e.g. summing foreground throughput across
+ * workers) are a groupby away in the analysis.
  */
 @CustomLog
 @Command(
@@ -67,8 +67,8 @@ public class SessionReportCommand implements Callable<Integer> {
         }
         Files.createDirectories(outDir);
 
-        writeCapacity(all.stream().filter(r -> "S1".equals(r.type)).toList());
-        writeChurn(all.stream().filter(r -> "S2".equals(r.type)).toList());
+        writeCapacity(all.stream().filter(r -> "capacity".equals(r.type)).toList());
+        writeChurn(all.stream().filter(r -> "churn".equals(r.type)).toList());
 
         JSON.writerWithDefaultPrettyPrinter()
                 .writeValue(outDir.resolve("session-summary.json").toFile(), all);
@@ -94,7 +94,7 @@ public class SessionReportCommand implements Callable<Integer> {
         return out;
     }
 
-    // ---- S1 capacity ----------------------------------------------------------------------------
+    // ---- capacity -------------------------------------------------------------------------------
 
     private void writeCapacity(List<SessionResult> results) throws IOException {
         if (results.isEmpty()) {
@@ -127,10 +127,10 @@ public class SessionReportCommand implements Callable<Integer> {
                                 p.footprintHeapMBPer10k));
             }
         }
-        write("session-s1.csv", sb.toString());
+        write("session-capacity.csv", sb.toString());
     }
 
-    // ---- S2 churn -------------------------------------------------------------------------------
+    // ---- churn ----------------------------------------------------------------------------------
 
     private void writeChurn(List<SessionResult> results) throws IOException {
         if (results.isEmpty()) {
@@ -164,7 +164,7 @@ public class SessionReportCommand implements Callable<Integer> {
                                 p.sustained));
             }
         }
-        write("session-s2.csv", sb.toString());
+        write("session-churn.csv", sb.toString());
     }
 
     // ---- helpers --------------------------------------------------------------------------------

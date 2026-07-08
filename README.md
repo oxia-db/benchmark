@@ -215,21 +215,21 @@ Run an experiment file with `--session-experiments` instead of `--workloads`:
 ```bash
 java -jar build/libs/oxia-benchmark-*-all.jar \
   --driver-config conf/driver-oxia.yaml \
-  --session-experiments conf/session-s1-capacity.yaml \
+  --session-experiments conf/session-capacity.yaml \
   --results-dir results --instance-id "$(hostname)"
 
 # Aggregate the per-worker *-session.jsonl files into per-experiment CSV + JSON:
 java -jar build/libs/oxia-benchmark-*-all.jar session-report --results-dir results --out report
 ```
 
-`conf/session-test.yaml` is a fast single-node smoke covering both experiments; `conf/session-s1-capacity.yaml` and `conf/session-s2-churn.yaml` are the full-scale definitions.
+`conf/session-test.yaml` is a fast single-node smoke covering both experiments; `conf/session-capacity.yaml` and `conf/session-churn.yaml` are the full-scale definitions.
 
 ### The experiments
 
-| ID | Name | What it does | Headline metric | Output |
-|----|------|--------------|-----------------|--------|
-| **S1** | Capacity | Fixed YCSB-A-style foreground load at ~50% of the system's own saturation; sweep live sessions N = 10k/50k/100k/500k | Max N with **<5% foreground throughput degradation**; foreground p99 and client footprint vs N | Time series (`session-s1.csv`) |
-| **S2** | Churn | Steady *r* sessions/s established (create + write *k* ephemerals) and *r* departing; sweep *r* to the latency knee; departure = graceful close **or** abandon (server-side expiry) | Max sustainable churn; p99 session-establish latency vs *r* | Per-rate rows (`session-s2.csv`) |
+| Type | What it does | Headline metric | Output |
+|------|--------------|-----------------|--------|
+| **`capacity`** | Fixed YCSB-A-style foreground load at ~50% of the system's own saturation; sweep live sessions N = 10k/50k/100k/500k | Max N with **<5% foreground throughput degradation**; foreground p99 and client footprint vs N | Time series (`session-capacity.csv`) |
+| **`churn`** | Steady *r* sessions/s established (create + write *k* ephemerals) and *r* departing; sweep *r* to the latency knee; departure = graceful close **or** abandon (server-side expiry) | Max sustainable churn; p99 session-establish latency vs *r* | Per-rate rows (`session-churn.csv`) |
 
 Every experiment carries *k* attached ephemeral keys per session; the shipped configs run both **k=1** and **k=10**.
 
@@ -250,7 +250,7 @@ The suite is built to make the comparison honest, not flattering:
 
 - **Identical timeout and heartbeat everywhere.** The session timeout (default 10s) and heartbeat cadence (`timeout/3`) come from the shared experiment YAML and are applied to every backend, so no system gets a slower-heartbeat or longer-grace advantage. Configure the ZooKeeper server `tickTime` so its min/max session bounds (2·tick .. 20·tick) admit the chosen timeout — 10s is fine with the default 2s tick.
 - **Closest contract-equivalent recipe, difference disclosed.** Where a system can't express an operation natively, the nearest equivalent is used and the gap is stated, not hidden. The disclosed differences: etcd multiplexes every lease over one shared client (no per-session socket), so its abrupt kill stops the keep-alive stream rather than dropping a socket; Oxia's abrupt kill reaches SDK internals reflectively (pinned to the client version in `build.gradle.kts`) because the public API offers only a graceful close.
-- **Client-side costs are measured, not hidden.** Sessions are async state machines in a pool (never a thread per session), and large session counts are spread across worker instances so no single process needs excessive sockets. The client footprint — **sockets, threads, and heap MB per 10k sessions** — is reported as a first-class metric (S1), so the per-session cost of ZooKeeper's and Oxia's connection-per-session model versus etcd's lease multiplexing is visible rather than assumed.
+- **Client-side costs are measured, not hidden.** Sessions are async state machines in a pool (never a thread per session), and large session counts are spread across worker instances so no single process needs excessive sockets. The client footprint — **sockets, threads, and heap MB per 10k sessions** — is reported as a first-class metric of the capacity experiment, so the per-session cost of ZooKeeper's and Oxia's connection-per-session model versus etcd's lease multiplexing is visible rather than assumed.
 
 ## Extending the Benchmark
 

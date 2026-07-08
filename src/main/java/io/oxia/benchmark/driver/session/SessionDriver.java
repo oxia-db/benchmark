@@ -21,9 +21,8 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * A {@link KVStoreDriver} that additionally exposes the session / ephemeral primitives the session
- * experiments (S1 capacity, S2 churn) drive. The inherited {@link #put}/{@link #get} run the
- * foreground (non-session) load; the methods here manage sessions and their attached ephemeral
- * keys.
+ * experiments (capacity, churn) drive. The inherited {@link #put}/{@link #get} run the foreground
+ * (non-session) load; the methods here manage sessions and their attached ephemeral keys.
  *
  * <p><b>Fairness contract.</b> Every method takes the same session timeout across systems and each
  * backend heartbeats at {@code timeout/3} (Oxia's SDK KeepAlive, ZooKeeper's SendThread ping,

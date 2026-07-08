@@ -34,7 +34,7 @@ public class SessionResult {
     public String instanceId; // worker / pod id
     public String name;
     public String description;
-    public String type; // S1 | S2
+    public String type; // capacity | churn
     public String driver;
 
     // Fairness knobs, echoed for the report and cross-checking that they matched across systems.
@@ -42,11 +42,11 @@ public class SessionResult {
     public double sessionTimeoutMs;
     public int ephemeralsPerSession;
 
-    public List<CapacityPoint> capacity; // S1
-    public List<ChurnPoint> churn; // S2
-    public String departure; // S2
+    public List<CapacityPoint> capacity; // capacity
+    public List<ChurnPoint> churn; // churn
+    public String departure; // churn
 
-    /** S1: one operating point in the live-session sweep. */
+    /** Capacity: one operating point in the live-session sweep. */
     public static class CapacityPoint {
         public long sessions; // N live sessions
         public double foregroundThroughput; // ops/s over the hold window
@@ -61,7 +61,7 @@ public class SessionResult {
         public double footprintHeapMBPer10k;
     }
 
-    /** S2: one churn rate in the sweep. */
+    /** Churn: one rate in the sweep. */
     public static class ChurnPoint {
         public double targetRate; // r sessions/s attempted
         public double achievedCreateRate; // established/s actually sustained

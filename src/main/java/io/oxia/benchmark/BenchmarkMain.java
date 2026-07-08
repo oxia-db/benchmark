@@ -59,7 +59,8 @@ public class BenchmarkMain implements Callable<Integer> {
 
     @Option(
             names = "--session-experiments",
-            description = "Path to session/ephemeral experiment YAML (runs S1-S4 instead of workloads)")
+            description =
+                    "Path to session/ephemeral experiment YAML (runs the session suite instead of workloads)")
     private Path sessionExperimentsPath;
 
     @Option(
@@ -137,9 +138,7 @@ public class BenchmarkMain implements Callable<Integer> {
         }
     }
 
-    /**
-     * Session/ephemeral suite (S1-S4). Mirrors the workload path but drives a {@link SessionDriver}.
-     */
+    /** Session/ephemeral suite. Mirrors the workload path but drives a {@link SessionDriver}. */
     private int runSessionExperiments(DriverConfig driverConf, String iid) throws IOException {
         SessionExperiments exps = SessionExperiments.load(sessionExperimentsPath);
         log.info("Loaded session experiments configuration");

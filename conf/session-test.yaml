@@ -1,12 +1,12 @@
-# Quick session-suite smoke: one tiny instance of each experiment (S1, S2) for local runs and CI.
+# Quick session-suite smoke: one tiny instance of each experiment (capacity, churn) for local runs and CI.
 # Scales are small and the timeout is short so the whole file finishes in about a minute against a
 # single-node cluster. sessionTimeout is 4s = 2*tickTime (the ZooKeeper minimum with the default
 # 2s tick); bump tickTime down if you want a shorter timeout.
 exitWhenFinish: true
 items:
-  - name: S1 smoke
+  - name: capacity smoke
     description: Tiny capacity sweep
-    type: S1
+    type: capacity
     sessionTimeout: 4s
     ephemeralsPerSession: 1
     createConcurrency: 64
@@ -16,9 +16,9 @@ items:
     foregroundKeyspaceSize: 10000
     foregroundParallelism: 2
     sessionsSweep: [50, 100]
-  - name: S2 smoke
+  - name: churn smoke
     description: Tiny churn sweep, graceful
-    type: S2
+    type: churn
     sessionTimeout: 4s
     ephemeralsPerSession: 1
     createConcurrency: 128

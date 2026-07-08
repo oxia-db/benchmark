@@ -95,7 +95,8 @@ public class OxiaDriver implements SessionDriver {
     @Override
     public CompletableFuture<SessionHandle> createSession(long logicalId, Duration timeout) {
         // One client == one session. The server-side session is created lazily on the first ephemeral
-        // put; establish latency (S2) is measured over createSession + the first putEphemeral together.
+        // put; churn-establish latency is measured over createSession + the first putEphemeral
+        // together.
         return baseBuilder()
                 .sessionTimeout(timeout)
                 .clientIdentifier("bench-sess-" + logicalId)
