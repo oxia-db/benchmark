@@ -19,6 +19,7 @@ import io.oxia.benchmark.driver.session.SessionDriver;
 import io.oxia.benchmark.driver.session.SessionHandle;
 import io.oxia.client.api.AsyncOxiaClient;
 import io.oxia.client.api.OxiaClientBuilder;
+import io.oxia.client.api.SharedResources;
 import io.oxia.client.api.options.PutOption;
 import java.io.IOException;
 import java.time.Duration;
@@ -32,16 +33,17 @@ import lombok.CustomLog;
  * experiments. Oxia binds a session to a client, so each benchmark session is its own {@code
  * AsyncOxiaClient} (with a distinct client identifier and the shared session timeout); ephemeral
  * keys are puts tagged {@code AsEphemeralRecord}, and the SDK's KeepAlive heartbeats keep the
- * session live. This mirrors ZooKeeper's one-session-per-connection model, so both pay a
- * per-session client cost the footprint metric captures — versus etcd, which multiplexes leases
- * over one client.
+ * session live. All clients — the main one and the per-session ones — share worker threads and gRPC
+ * connections through one {@link SharedResources} (oxia-client 0.9.1+), so per-session transport
+ * cost is amortized as with etcd's leases; what remains per client (its session heartbeat, batcher
+ * threads, heap) is what the footprint metric measures.
  *
  * <ul>
  *   <li><b>Graceful close</b> — {@code client.close()} sends CloseSession; the server drops the
- *       session and its ephemerals immediately.
- *   <li><b>Abrupt kill</b> — {@link OxiaSessionInternals#kill} cancels the KeepAlive task and shuts
- *       down the gRPC channel <em>without</em> {@code close()}, so no CloseSession is sent and the
- *       server reaps the session only via heartbeat-timeout expiry.
+ *       session and its ephemerals immediately (the shared transport stays up).
+ *   <li><b>Abrupt kill</b> — {@link OxiaSessionInternals#kill} cancels the KeepAlive task
+ *       <em>without</em> {@code close()}, so no CloseSession is sent and the server reaps the
+ *       session only via heartbeat-timeout expiry.
  * </ul>
  */
 @CustomLog
@@ -51,6 +53,7 @@ public class OxiaDriver implements SessionDriver {
     private String namespace;
     private int batchMaxCount;
 
+    private SharedResources sharedResources;
     private AsyncOxiaClient client;
 
     @Override
@@ -67,11 +70,15 @@ public class OxiaDriver implements SessionDriver {
         batchMaxCount =
                 config.containsKey("batchMaxCount") ? ((Number) config.get("batchMaxCount")).intValue() : 0;
 
+        // One pool of worker threads + gRPC connections for every client this driver creates, so a
+        // large session count doesn't multiply event loops and sockets per client.
+        sharedResources = SharedResources.builder().build();
         client = baseBuilder().asyncClient().get();
     }
 
     private OxiaClientBuilder baseBuilder() {
-        OxiaClientBuilder builder = OxiaClientBuilder.create(serviceAddress);
+        OxiaClientBuilder builder =
+                OxiaClientBuilder.create(serviceAddress).sharedResources(sharedResources);
         if (namespace != null) {
             builder.namespace(namespace);
         }
@@ -126,17 +133,21 @@ public class OxiaDriver implements SessionDriver {
     @Override
     public CompletableFuture<Void> killSession(SessionHandle session) {
         OxiaSessionHandle h = (OxiaSessionHandle) session;
-        // Abrupt: stop heartbeats and drop the transport, no CloseSession. Never call client.close().
+        // Abrupt: stop heartbeats, no CloseSession. Never call client.close().
         return CompletableFuture.runAsync(() -> OxiaSessionInternals.kill(h.client));
     }
 
     @Override
     public void close() throws IOException {
-        if (client != null) {
-            try {
+        try {
+            if (client != null) {
                 client.close();
-            } catch (Exception e) {
-                throw new IOException(e);
+            }
+        } catch (Exception e) {
+            throw new IOException(e);
+        } finally {
+            if (sharedResources != null) {
+                sharedResources.close();
             }
         }
     }

@@ -25,18 +25,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Simulates an abrupt client death for an Oxia session by reaching into SDK internals. The public
  * {@code AsyncOxiaClient} exposes only {@code close()}, which sends a graceful CloseSession and
- * skips the server-side expiry path — the exact path the cleanup experiments must exercise. So, to
- * model a crashed client, we instead:
+ * skips the server-side expiry path — the exact path the churn "abandon" departure must exercise.
+ * So, to model a crashed client, we instead:
  *
  * <ol>
  *   <li>cancel each shard {@code Session}'s KeepAlive task and mark it closed, stopping heartbeats;
- *   <li>shut the gRPC channels now, dropping the transport without a protocol goodbye.
+ *   <li>close the client's batcher threads — a purely local teardown (pending ops fail without
+ *       anything being sent on the wire), so abandoned clients don't leak two threads each.
  * </ol>
  *
- * <p>The server then reaps the session only after the heartbeat timeout, as a real crash would.
- * Field names are pinned to the {@code io.github.oxia-db:oxia-client} version in build.gradle.kts;
- * if the internals move, {@link #kill} throws so a run fails loudly rather than silently degrading
- * a "kill" into a no-op (which would corrupt the EXCESS measurement).
+ * <p>The transport is left alone: the benchmark's clients share connections via {@code
+ * SharedResources} (oxia-client 0.9.1+), so there is no per-session socket to drop — the same
+ * disclosed model as etcd's leases. The server then reaps the session only after the heartbeat
+ * timeout, as with a real crash. Field names are pinned to the {@code
+ * io.github.oxia-db:oxia-client} version in build.gradle.kts; if the internals move, {@link #kill}
+ * throws so a run fails loudly rather than silently degrading a "kill" into a no-op (which would
+ * corrupt the expiry measurements).
  */
 final class OxiaSessionInternals {
 
@@ -45,7 +49,7 @@ final class OxiaSessionInternals {
     static void kill(AsyncOxiaClient client) {
         try {
             stopHeartbeats(client);
-            dropTransport(client);
+            closeBatchers(client);
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(
                     "Failed to abruptly kill Oxia session via SDK internals; the oxia-client internal"
@@ -86,20 +90,16 @@ final class OxiaSessionInternals {
         }
     }
 
-    /** Force-close the client's gRPC channels so the sockets drop, as on process death. */
-    @SuppressWarnings("unchecked")
-    private static void dropTransport(AsyncOxiaClient client) throws ReflectiveOperationException {
-        Object rpcProvider = get(client, "rpcProvider");
-        Object connectionManager = get(rpcProvider, "connectionManager");
-        Object connectionsObj = get(connectionManager, "connections");
-        if (!(connectionsObj instanceof Map<?, ?> connections)) {
-            return;
-        }
-        for (Object connection : ((Map<Object, Object>) connections).values()) {
-            Object channel = get(connection, "channel");
-            if (channel != null) {
-                // io.grpc.ManagedChannel#shutdownNow — reflected to avoid a compile dep on gRPC.
-                channel.getClass().getMethod("shutdownNow").invoke(channel);
+    /** Stop the client's read/write batcher threads (local only; nothing goes on the wire). */
+    private static void closeBatchers(AsyncOxiaClient client) throws ReflectiveOperationException {
+        for (String field : new String[] {"readBatchManager", "writeBatchManager"}) {
+            Object manager = get(client, field);
+            if (manager instanceof AutoCloseable closeable) {
+                try {
+                    closeable.close();
+                } catch (Exception ignored) {
+                    // best-effort thread reaping; the heartbeat stop above is what matters
+                }
             }
         }
     }

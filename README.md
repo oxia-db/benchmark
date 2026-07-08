@@ -239,18 +239,18 @@ A "session with *k* ephemeral keys" maps to each system's native primitive:
 
 | Operation | Oxia | ZooKeeper | etcd |
 |-----------|------|-----------|------|
-| Session | One `AsyncOxiaClient` (SDK KeepAlive heartbeats) | One `ZooKeeper` handle = one session per TCP connection (ZK's model, kept as-is) | One lease with a TTL, renewed by a `LeaseKeepAlive` stream |
+| Session | One `AsyncOxiaClient` (SDK KeepAlive heartbeats); clients share threads and connections via `SharedResources` | One `ZooKeeper` handle = one session per TCP connection (ZK's model, kept as-is) | One lease with a TTL, renewed by a `LeaseKeepAlive` stream |
 | Ephemeral key | `put(..., AsEphemeralRecord)` | Ephemeral znode | `put(..., withLeaseId)` |
 | Graceful close | `client.close()` (CloseSession) | `ZooKeeper.close()` | Lease revoke |
-| Abrupt kill | Cancel KeepAlive + drop gRPC channel via SDK internals — no CloseSession | `ClientCnxn.disconnect()`: close the socket **without** `close()` (which would end the session gracefully and skip expiry) | Stop the keep-alive stream, no revoke; lease lapses after TTL |
+| Abrupt kill | Cancel KeepAlive via SDK internals — no CloseSession; the shared transport stays up | `ClientCnxn.disconnect()`: close the socket **without** `close()` (which would end the session gracefully and skip expiry) | Stop the keep-alive stream, no revoke; lease lapses after TTL |
 
 ### Fairness rules
 
 The suite is built to make the comparison honest, not flattering:
 
 - **Identical timeout and heartbeat everywhere.** The session timeout (default 10s) and heartbeat cadence (`timeout/3`) come from the shared experiment YAML and are applied to every backend, so no system gets a slower-heartbeat or longer-grace advantage. Configure the ZooKeeper server `tickTime` so its min/max session bounds (2·tick .. 20·tick) admit the chosen timeout — 10s is fine with the default 2s tick.
-- **Closest contract-equivalent recipe, difference disclosed.** Where a system can't express an operation natively, the nearest equivalent is used and the gap is stated, not hidden. The disclosed differences: etcd multiplexes every lease over one shared client (no per-session socket), so its abrupt kill stops the keep-alive stream rather than dropping a socket; Oxia's abrupt kill reaches SDK internals reflectively (pinned to the client version in `build.gradle.kts`) because the public API offers only a graceful close.
-- **Client-side costs are measured, not hidden.** Sessions are async state machines in a pool (never a thread per session), and large session counts are spread across worker instances so no single process needs excessive sockets. The client footprint — **sockets, threads, and heap MB per 10k sessions** — is reported as a first-class metric of the capacity experiment, so the per-session cost of ZooKeeper's and Oxia's connection-per-session model versus etcd's lease multiplexing is visible rather than assumed.
+- **Closest contract-equivalent recipe, difference disclosed.** Where a system can't express an operation natively, the nearest equivalent is used and the gap is stated, not hidden. The disclosed differences: etcd multiplexes every lease over one shared client and Oxia multiplexes its per-session clients over shared threads/connections (`SharedResources`, oxia-client 0.9.1+) — so for both, the abrupt kill stops heartbeats rather than dropping a socket, since there is no per-session socket to drop; Oxia's abrupt kill reaches SDK internals reflectively (pinned to the client version in `build.gradle.kts`) because the public API offers only a graceful close.
+- **Client-side costs are measured, not hidden.** Sessions are async state machines in a pool (never a thread per session), and large session counts are spread across worker instances so no single process needs excessive sockets. The client footprint — **sockets, threads, and heap MB per 10k sessions** — is reported as a first-class metric of the capacity experiment, so the per-session cost of ZooKeeper's connection-per-session model versus Oxia's and etcd's shared-transport multiplexing is visible rather than assumed.
 
 ## Extending the Benchmark
 
