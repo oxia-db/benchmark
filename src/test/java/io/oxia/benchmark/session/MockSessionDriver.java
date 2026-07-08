@@ -80,7 +80,6 @@ class MockSessionDriver implements SessionDriver {
     public CompletableFuture<Void> putEphemeral(SessionHandle session, String key, byte[] value) {
         present.add(key);
         sessionKeys.computeIfAbsent(session.logicalId(), id -> new CopyOnWriteArrayList<>()).add(key);
-        notifyWatches(key, true);
         return CompletableFuture.completedFuture(null);
     }
 
@@ -121,19 +120,11 @@ class MockSessionDriver implements SessionDriver {
         if (keys == null) {
             return;
         }
+        long now = System.nanoTime();
         for (String key : keys) {
             present.remove(key);
-            notifyWatches(key, false);
-        }
-    }
-
-    private void notifyWatches(String key, boolean created) {
-        long now = System.nanoTime();
-        for (Watch w : watches) {
-            if (key.startsWith(w.prefix)) {
-                if (created) {
-                    w.listener.onKeyCreated(key, now);
-                } else {
+            for (Watch w : watches) {
+                if (key.startsWith(w.prefix)) {
                     w.listener.onKeyDeleted(key, now);
                 }
             }
@@ -146,9 +137,5 @@ class MockSessionDriver implements SessionDriver {
 
     private record Watch(String prefix, PrefixListener listener) {}
 
-    private static final class MockHandle extends SessionHandle {
-        MockHandle(long logicalId) {
-            super(logicalId);
-        }
-    }
+    private record MockHandle(long logicalId) implements SessionHandle {}
 }

@@ -20,7 +20,6 @@ import io.oxia.benchmark.driver.DriverConfig;
 import io.oxia.benchmark.driver.DriverFactory;
 import io.oxia.benchmark.driver.KVStoreDriver;
 import io.oxia.benchmark.driver.session.SessionDriver;
-import io.oxia.benchmark.driver.session.SessionDriverFactory;
 import io.oxia.benchmark.report.ReportCommand;
 import io.oxia.benchmark.report.SessionReportCommand;
 import io.oxia.benchmark.report.WorkloadResult;
@@ -141,37 +140,32 @@ public class BenchmarkMain implements Callable<Integer> {
     /**
      * Session/ephemeral suite (S1-S4). Mirrors the workload path but drives a {@link SessionDriver}.
      */
-    private int runSessionExperiments(DriverConfig driverConf, String iid)
-            throws IOException, InterruptedException {
+    private int runSessionExperiments(DriverConfig driverConf, String iid) throws IOException {
         SessionExperiments exps = SessionExperiments.load(sessionExperimentsPath);
         log.info("Loaded session experiments configuration");
 
-        try (SessionDriver driver = SessionDriverFactory.build(driverConf)) {
+        String label = driverConf.label();
+
+        try (SessionDriver driver = DriverFactory.buildSession(driverConf)) {
             for (int i = 0; i < exps.items().size(); i++) {
                 SessionExperiment exp = exps.items().get(i);
                 log.info().attr("experiment", exp).log("Starting session experiment");
 
-                boolean success = false;
-                int maxRetries = 3;
-                for (int attempt = 0; attempt < maxRetries && !success; attempt++) {
-                    try {
-                        SessionResult result = new SessionExperimentRunner(exp, driver, iid).run();
-                        success = true;
-                        if (resultsDir != null) {
-                            result.index = i;
-                            result.instanceId = iid;
-                            writeSessionResult(result);
-                        }
-                    } catch (Exception e) {
-                        log.error()
-                                .attr("attempt", attempt + 1)
-                                .attr("maxRetries", maxRetries)
-                                .exception(e)
-                                .log("Session experiment interrupted by error, retrying");
-                        Thread.sleep(Math.min(1000L * (1 << attempt), 30_000));
+                // No retry: a half-run experiment leaves sessions/keys behind on the server, and a
+                // rerun against that residue would skew the numbers. Log and move to the next one.
+                try {
+                    SessionResult result = new SessionExperimentRunner(exp, driver, iid).run();
+                    if (label != null && !label.isEmpty()) {
+                        result.driver = label; // same role as LabeledDriver on the workload path
                     }
+                    if (resultsDir != null) {
+                        result.index = i;
+                        result.instanceId = iid;
+                        writeSessionResult(result);
+                    }
+                } catch (Exception e) {
+                    log.error().exception(e).log("Session experiment failed, moving to next");
                 }
-                log.info("Finished session experiment, moving to next.");
             }
 
             log.info("All session experiments finished.");

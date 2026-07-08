@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -72,8 +71,7 @@ public class ZooKeeperSessionDriver implements SessionDriver {
     private String connectString;
     private ZooKeeper observer; // foreground load + exists() probes + prefix watches
     private ExecutorService
-            blockingIo; // ZK close()/disconnect() can block; keep them off pool threads
-    private final Set<String> ensuredPaths = ConcurrentHashMap.newKeySet();
+            blockingIo; // ZK connect/close/disconnect block; keep them off pool threads
 
     @Override
     public String name() {
@@ -98,7 +96,8 @@ public class ZooKeeperSessionDriver implements SessionDriver {
                         });
 
         observer = connect(connectString, OBSERVER_TIMEOUT);
-        ensurePersistentPath(observer, FOREGROUND_ROOT);
+        createPersistentIfAbsent(observer, FOREGROUND_ROOT)
+                .get(OBSERVER_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /** Open a ZooKeeper connection and block only the caller until SyncConnected. */
@@ -188,8 +187,7 @@ public class ZooKeeperSessionDriver implements SessionDriver {
         blockingIo.execute(
                 () -> {
                     try {
-                        ZooKeeper zk = connect(connectString, timeout);
-                        future.complete(new ZkSessionHandle(logicalId, zk));
+                        future.complete(new ZkSessionHandle(logicalId, connect(connectString, timeout)));
                     } catch (Exception e) {
                         future.completeExceptionally(e);
                     }
@@ -199,21 +197,61 @@ public class ZooKeeperSessionDriver implements SessionDriver {
 
     @Override
     public CompletableFuture<Void> putEphemeral(SessionHandle session, String key, byte[] value) {
-        ZooKeeper zk = ((ZkSessionHandle) session).zk;
-        String path = "/" + key;
-        String parent = path.substring(0, path.lastIndexOf('/'));
-        // Ensure the persistent ancestor chain, then create the ephemeral leaf on the session's own
-        // connection so the znode lives and dies with that session.
-        return ensurePath(zk, parent).thenCompose(v -> createEphemeral(zk, path, value));
+        // Create the ephemeral leaf on the session's own connection so the znode lives and dies with
+        // that session. The persistent parent chain is created on demand (see createEphemeral).
+        return createEphemeral(((ZkSessionHandle) session).zk(), "/" + key, value, true);
     }
 
-    private CompletableFuture<Void> createEphemeral(ZooKeeper zk, String path, byte[] value) {
+    /** Create the ephemeral leaf; on NONODE (parent missing) create the ancestors and retry once. */
+    private CompletableFuture<Void> createEphemeral(
+            ZooKeeper zk, String path, byte[] value, boolean retryOnNoNode) {
         CompletableFuture<Void> f = new CompletableFuture<>();
         zk.create(
                 path,
                 value,
                 ZooDefs.Ids.OPEN_ACL_UNSAFE,
                 CreateMode.EPHEMERAL,
+                (rc, p, ctx, name) -> {
+                    if (rc == KeeperException.Code.OK.intValue()
+                            || rc == KeeperException.Code.NODEEXISTS.intValue()) {
+                        f.complete(null);
+                    } else if (rc == KeeperException.Code.NONODE.intValue() && retryOnNoNode) {
+                        createAncestors(zk, path)
+                                .thenCompose(v -> createEphemeral(zk, path, value, false))
+                                .whenComplete(
+                                        (v, ex) -> {
+                                            if (ex != null) {
+                                                f.completeExceptionally(ex);
+                                            } else {
+                                                f.complete(null);
+                                            }
+                                        });
+                    } else {
+                        f.completeExceptionally(KeeperException.create(KeeperException.Code.get(rc), path));
+                    }
+                },
+                null);
+        return f;
+    }
+
+    /** Blind-create each persistent ancestor of {@code path} in order (NODEEXISTS is fine). */
+    private static CompletableFuture<Void> createAncestors(ZooKeeper zk, String path) {
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        int idx = 0;
+        while ((idx = path.indexOf('/', idx + 1)) != -1) {
+            String ancestor = path.substring(0, idx);
+            chain = chain.thenCompose(v -> createPersistentIfAbsent(zk, ancestor));
+        }
+        return chain;
+    }
+
+    private static CompletableFuture<Void> createPersistentIfAbsent(ZooKeeper zk, String path) {
+        CompletableFuture<Void> f = new CompletableFuture<>();
+        zk.create(
+                path,
+                new byte[0],
+                ZooDefs.Ids.OPEN_ACL_UNSAFE,
+                CreateMode.PERSISTENT,
                 (rc, p, ctx, name) -> {
                     if (rc == KeeperException.Code.OK.intValue()
                             || rc == KeeperException.Code.NODEEXISTS.intValue()) {
@@ -228,7 +266,7 @@ public class ZooKeeperSessionDriver implements SessionDriver {
 
     @Override
     public CompletableFuture<Void> closeSession(SessionHandle session) {
-        ZooKeeper zk = ((ZkSessionHandle) session).zk;
+        ZooKeeper zk = ((ZkSessionHandle) session).zk();
         return CompletableFuture.runAsync(
                 () -> {
                     try {
@@ -243,29 +281,22 @@ public class ZooKeeperSessionDriver implements SessionDriver {
 
     @Override
     public CompletableFuture<Void> killSession(SessionHandle session) {
-        ZooKeeper zk = ((ZkSessionHandle) session).zk;
+        ZooKeeper zk = ((ZkSessionHandle) session).zk();
         return CompletableFuture.runAsync(
                 () -> {
                     try {
-                        // Reach the ClientCnxn and disconnect(): stops the SendThread (no more pings, no
-                        // reconnect) and closes the socket WITHOUT sending the close-session request, so the
-                        // server reaps the session only via expiry. We deliberately never call zk.close() here.
-                        disconnectAbruptly(zk);
+                        // ZooKeeper.cnxn (protected) -> ClientCnxn.disconnect() (public): stop the SendThread
+                        // (no more pings, no reconnect) and close the socket WITHOUT sending the close-session
+                        // request, so the server reaps the session only via expiry. Never zk.close() here.
+                        Field cnxnField = ZooKeeper.class.getDeclaredField("cnxn");
+                        cnxnField.setAccessible(true);
+                        Object cnxn = cnxnField.get(zk);
+                        cnxn.getClass().getMethod("disconnect").invoke(cnxn);
                     } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
                 },
                 blockingIo);
-    }
-
-    private void disconnectAbruptly(ZooKeeper zk) throws ReflectiveOperationException {
-        // ZooKeeper.cnxn (protected) -> ClientCnxn.disconnect() (public): stop the SendThread and close
-        // the socket without enqueuing a close-session packet. Verified against the pinned zookeeper
-        // version in build.gradle.kts.
-        Field cnxnField = ZooKeeper.class.getDeclaredField("cnxn");
-        cnxnField.setAccessible(true);
-        Object cnxn = cnxnField.get(zk);
-        cnxn.getClass().getMethod("disconnect").invoke(cnxn);
     }
 
     @Override
@@ -290,22 +321,15 @@ public class ZooKeeperSessionDriver implements SessionDriver {
 
     @Override
     public Closeable watchPrefix(String prefix, PrefixListener listener) {
-        // Classic child-watch with re-registration. The prefix is interpreted as the parent znode
-        // whose ephemeral children we observe; deletions are found by diffing the child set on each
-        // re-read (ZK tells us only that children changed, not which one).
-        String parent = "/" + trimTrailingSlash(prefix);
+        // The prefix is interpreted as the parent znode whose ephemeral children we observe.
+        String parent =
+                "/" + (prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix);
         ChildWatch watch = new ChildWatch(parent, listener);
         watch.arm();
         return watch;
     }
 
-    private static String trimTrailingSlash(String s) {
-        return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
-    }
-
-    /**
-     * Re-registering child watcher: diffs the child set on each fire to emit create/delete events.
-     */
+    /** Re-registering child watcher: diffs the child set on each fire to emit deletion events. */
     private final class ChildWatch implements Watcher, Closeable {
         private final String parent;
         private final PrefixListener listener;
@@ -330,25 +354,15 @@ public class ZooKeeperSessionDriver implements SessionDriver {
                             return; // parent gone or transient error: stop quietly
                         }
                         Set<String> current = new HashSet<>(children);
-                        Set<String> prev = known;
-                        for (String c : prev) {
+                        for (String c : known) {
                             if (!current.contains(c)) {
-                                listener.onKeyDeleted(childKey(c), now);
-                            }
-                        }
-                        for (String c : current) {
-                            if (!prev.contains(c)) {
-                                listener.onKeyCreated(childKey(c), now);
+                                // Strip the leading '/' so keys read back the same across systems.
+                                listener.onKeyDeleted((parent + "/" + c).substring(1), now);
                             }
                         }
                         known = current;
                     },
                     null);
-        }
-
-        private String childKey(String child) {
-            // Strip the leading '/' so keys read back the same across systems.
-            return (parent + "/" + child).substring(1);
         }
 
         @Override
@@ -362,44 +376,6 @@ public class ZooKeeperSessionDriver implements SessionDriver {
         public void close() {
             active.set(false);
         }
-    }
-
-    // ---- persistent-path helpers ----------------------------------------------------------------
-
-    /**
-     * Async-ensure the full ancestor chain of a path exists as persistent znodes, cached once seen.
-     */
-    private CompletableFuture<Void> ensurePath(ZooKeeper zk, String path) {
-        if (path.isEmpty() || path.equals("/") || ensuredPaths.contains(path)) {
-            return CompletableFuture.completedFuture(null);
-        }
-        String parent = path.substring(0, path.lastIndexOf('/'));
-        return ensurePath(zk, parent)
-                .thenCompose(v -> createPersistentIfAbsent(zk, path))
-                .thenRun(() -> ensuredPaths.add(path));
-    }
-
-    private static CompletableFuture<Void> createPersistentIfAbsent(ZooKeeper zk, String path) {
-        CompletableFuture<Void> f = new CompletableFuture<>();
-        zk.create(
-                path,
-                new byte[0],
-                ZooDefs.Ids.OPEN_ACL_UNSAFE,
-                CreateMode.PERSISTENT,
-                (rc, p, ctx, name) -> {
-                    if (rc == KeeperException.Code.OK.intValue()
-                            || rc == KeeperException.Code.NODEEXISTS.intValue()) {
-                        f.complete(null);
-                    } else {
-                        f.completeExceptionally(KeeperException.create(KeeperException.Code.get(rc), path));
-                    }
-                },
-                null);
-        return f;
-    }
-
-    private void ensurePersistentPath(ZooKeeper zk, String path) throws Exception {
-        ensurePath(zk, path).get(OBSERVER_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -419,17 +395,5 @@ public class ZooKeeperSessionDriver implements SessionDriver {
     }
 
     /** ZK session state: its dedicated connection. */
-    private static final class ZkSessionHandle extends SessionHandle {
-        private final ZooKeeper zk;
-
-        ZkSessionHandle(long logicalId, ZooKeeper zk) {
-            super(logicalId);
-            this.zk = zk;
-        }
-
-        @Override
-        public long backendId() {
-            return zk.getSessionId();
-        }
-    }
+    private record ZkSessionHandle(long logicalId, ZooKeeper zk) implements SessionHandle {}
 }

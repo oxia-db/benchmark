@@ -26,11 +26,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 import lombok.CustomLog;
@@ -41,10 +38,8 @@ import picocli.CommandLine.Option;
  * Aggregates the per-worker session-experiment result files (one JSONL line each, {@link
  * SessionResult}) into chart-ready CSV plus a raw JSON dump — the session-suite analogue of {@code
  * ReportCommand}. Each experiment type flattens to its own CSV: time series for S1/S2/S4 and one
- * row per trial for S3 (so a CDF plots directly). S1 and S2 also get a headline CSV with the
- * deliverable numbers (max sustainable N under 5% degradation; max sustainable churn). Rows keep
- * {@code instanceId} so nothing is lost to aggregation; per-cluster roll-ups sum foreground
- * throughput across workers and average per-worker footprint.
+ * row per trial for S3 (so a CDF plots directly). Rows keep {@code instanceId}, so cluster-level
+ * roll-ups (e.g. summing foreground throughput across workers) are a groupby away in the analysis.
  */
 @CustomLog
 @Command(
@@ -138,66 +133,6 @@ public class SessionReportCommand implements Callable<Integer> {
             }
         }
         write("session-s1.csv", sb.toString());
-        writeCapacityHeadline(results);
-    }
-
-    /** Cluster roll-up per (index, driver): throughput summed across workers, headline max N < 5%. */
-    private void writeCapacityHeadline(List<SessionResult> results) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        sb.append(
-                "index,name,driver,workers,sessions,cluster_throughput,degradation_pct,"
-                        + "mean_threads_per10k,mean_heap_mb_per10k,max_sustainable_n\n");
-        for (Map.Entry<String, List<SessionResult>> e : groupByIndexDriver(results).entrySet()) {
-            List<SessionResult> group = e.getValue();
-            SessionResult first = group.get(0);
-            // Aggregate each N across workers.
-            Map<Long, double[]> byN =
-                    new TreeMap<>(); // N -> [sumThroughput, sumDeg, sumThreads, sumHeap, count]
-            for (SessionResult r : group) {
-                for (CapacityPoint p : nn(r.capacity)) {
-                    double[] acc = byN.computeIfAbsent(p.sessions, k -> new double[5]);
-                    acc[0] += p.foregroundThroughput;
-                    acc[1] += p.degradationPct;
-                    acc[2] += p.footprintThreadsPer10k;
-                    acc[3] += p.footprintHeapMBPer10k;
-                    acc[4] += 1;
-                }
-            }
-            double baseline =
-                    byN.containsKey(0L)
-                            ? byN.get(0L)[0]
-                            : byN.values().stream().findFirst().orElse(new double[5])[0];
-            long maxSustainable = 0;
-            for (Map.Entry<Long, double[]> pe : byN.entrySet()) {
-                long n = pe.getKey();
-                double[] acc = pe.getValue();
-                double clusterThroughput = acc[0];
-                double degradation = baseline > 0 ? (baseline - clusterThroughput) / baseline * 100.0 : 0.0;
-                if (degradation < 5.0 && n > maxSustainable) {
-                    maxSustainable = n;
-                }
-                sb.append(
-                        String.format(
-                                Locale.ROOT,
-                                "%d,%s,%s,%d,%d,%.1f,%.2f,%.1f,%.2f,%d%n",
-                                first.index,
-                                csv(first.name),
-                                first.driver,
-                                group.size(),
-                                n,
-                                clusterThroughput,
-                                degradation,
-                                acc[4] > 0 ? acc[2] / acc[4] : 0,
-                                acc[4] > 0 ? acc[3] / acc[4] : 0,
-                                maxSustainable));
-            }
-            log.info()
-                    .attr("experiment", first.name)
-                    .attr("driver", first.driver)
-                    .attr("maxSustainableN", maxSustainable)
-                    .log("S1 headline: max live sessions under 5% foreground degradation");
-        }
-        write("session-s1-headline.csv", sb.toString());
     }
 
     // ---- S2 churn -------------------------------------------------------------------------------
@@ -235,58 +170,6 @@ public class SessionReportCommand implements Callable<Integer> {
             }
         }
         write("session-s2.csv", sb.toString());
-        writeChurnHeadline(results);
-    }
-
-    private void writeChurnHeadline(List<SessionResult> results) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        sb.append(
-                "index,name,driver,workers,departure,target_rate,cluster_achieved_rate,"
-                        + "all_sustained,max_establish_p99_ms,max_sustainable_churn\n");
-        for (Map.Entry<String, List<SessionResult>> e : groupByIndexDriver(results).entrySet()) {
-            List<SessionResult> group = e.getValue();
-            SessionResult first = group.get(0);
-            Map<Double, double[]> byRate =
-                    new TreeMap<>(); // rate -> [sumAchieved, maxP99, allSustained(1/0), count]
-            for (SessionResult r : group) {
-                for (ChurnPoint p : nn(r.churn)) {
-                    double[] acc = byRate.computeIfAbsent(p.targetRate, k -> new double[] {0, 0, 1, 0});
-                    acc[0] += p.achievedCreateRate;
-                    acc[1] = Math.max(acc[1], p.establishP99);
-                    acc[2] = acc[2] == 1 && p.sustained ? 1 : 0;
-                    acc[3] += 1;
-                }
-            }
-            double maxSustainable = 0;
-            for (Map.Entry<Double, double[]> re : byRate.entrySet()) {
-                double rate = re.getKey();
-                double[] acc = re.getValue();
-                boolean allSustained = acc[2] == 1;
-                if (allSustained && rate > maxSustainable) {
-                    maxSustainable = rate;
-                }
-                sb.append(
-                        String.format(
-                                Locale.ROOT,
-                                "%d,%s,%s,%d,%s,%.0f,%.1f,%b,%.3f,%.0f%n",
-                                first.index,
-                                csv(first.name),
-                                first.driver,
-                                group.size(),
-                                first.departure,
-                                rate,
-                                acc[0],
-                                allSustained,
-                                acc[1],
-                                maxSustainable));
-            }
-            log.info()
-                    .attr("experiment", first.name)
-                    .attr("driver", first.driver)
-                    .attr("maxSustainableChurn", String.format("%.0f", maxSustainable))
-                    .log("S2 headline: max sustainable churn (sessions/s)");
-        }
-        write("session-s2-headline.csv", sb.toString());
     }
 
     // ---- S3 cleanup-visibility (one row per trial → CDF) ----------------------------------------
@@ -359,14 +242,6 @@ public class SessionReportCommand implements Callable<Integer> {
     }
 
     // ---- helpers --------------------------------------------------------------------------------
-
-    private Map<String, List<SessionResult>> groupByIndexDriver(List<SessionResult> results) {
-        Map<String, List<SessionResult>> byGroup = new LinkedHashMap<>();
-        for (SessionResult r : results) {
-            byGroup.computeIfAbsent(r.index + "|" + r.driver, k -> new ArrayList<>()).add(r);
-        }
-        return byGroup;
-    }
 
     private void write(String file, String content) throws IOException {
         Files.writeString(outDir.resolve(file), content);

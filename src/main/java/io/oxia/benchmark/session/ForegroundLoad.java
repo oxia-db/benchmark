@@ -16,6 +16,7 @@
 package io.oxia.benchmark.session;
 
 import io.oxia.benchmark.driver.KVStoreDriver;
+import io.oxia.benchmark.runner.BenchmarkRunner;
 import io.oxia.benchmark.runner.UniformRateLimiter;
 import io.oxia.benchmark.runner.sequence.SequenceGenerator;
 import java.util.ArrayList;
@@ -34,12 +35,12 @@ import org.HdrHistogram.DoubleRecorder;
  * <em>alongside</em> the sessions in S1 (capacity), S3 (load condition), and S4 (storm timeline).
  * It is the session suite's analogue of {@code BenchmarkRunner}'s traffic loop, but
  * startable/stoppable and pollable for interval throughput and p99 so the runner can watch how
- * session activity perturbs it. Latency uses actual send time (coordinated-omission-corrected
- * pacing is handled by {@link UniformRateLimiter}).
+ * session activity perturbs it.
  */
 public class ForegroundLoad {
 
     private static final long MAX_LATENCY_MICROS = TimeUnit.SECONDS.toMicros(60);
+    private static final int MAX_OUTSTANDING = 10_000; // same in-flight cap as the workload default
 
     private final KVStoreDriver driver;
     private final double targetRate;
@@ -48,7 +49,6 @@ public class ForegroundLoad {
     private final String keyDistribution;
     private final int valueSize;
     private final int parallelism;
-    private final int perThreadOutstanding;
     private final String[] keys;
 
     private final DoubleRecorder recorder = new DoubleRecorder(3);
@@ -57,7 +57,7 @@ public class ForegroundLoad {
     private final List<Thread> workers = new ArrayList<>();
 
     private DoubleHistogram intervalRecycle;
-    private long lastSnapshotNanos;
+    private long lastSnapshotNanos = System.nanoTime();
     private long lastFailed;
 
     public ForegroundLoad(
@@ -67,8 +67,7 @@ public class ForegroundLoad {
             long keyspaceSize,
             String keyDistribution,
             int valueSize,
-            int parallelism,
-            int maxOutstandingRequests) {
+            int parallelism) {
         this.driver = driver;
         this.targetRate = targetRate;
         this.readRatio = readRatio;
@@ -76,9 +75,7 @@ public class ForegroundLoad {
         this.keyDistribution = keyDistribution;
         this.valueSize = valueSize;
         this.parallelism = Math.max(1, parallelism);
-        int maxOut = maxOutstandingRequests <= 0 ? 10_000 : maxOutstandingRequests;
-        this.perThreadOutstanding = Math.max(1, maxOut / this.parallelism);
-        this.keys = buildKeys(keyspaceSize);
+        this.keys = BenchmarkRunner.buildKeys(keyspaceSize);
     }
 
     public boolean active() {
@@ -90,7 +87,6 @@ public class ForegroundLoad {
         if (!active() || !running.compareAndSet(false, true)) {
             return;
         }
-        lastSnapshotNanos = System.nanoTime();
         for (int i = 0; i < parallelism; i++) {
             Thread t = new Thread(this::generate, "fg-load-" + i);
             t.setDaemon(true);
@@ -115,13 +111,12 @@ public class ForegroundLoad {
 
     private void generate() {
         byte[] value = new byte[valueSize];
-        Semaphore outstanding = new Semaphore(perThreadOutstanding);
+        Semaphore outstanding = new Semaphore(Math.max(1, MAX_OUTSTANDING / parallelism));
         SequenceGenerator seqGen = SequenceGenerator.create(keyDistribution, keyspaceSize);
         UniformRateLimiter limiter = new UniformRateLimiter(targetRate / parallelism);
 
         while (running.get()) {
-            long intendedSendTime = limiter.acquire();
-            UniformRateLimiter.sleepUntil(intendedSendTime);
+            UniformRateLimiter.sleepUntil(limiter.acquire());
             if (!running.get()) {
                 break;
             }
@@ -169,39 +164,14 @@ public class ForegroundLoad {
         long failedNow = failedOps.sum();
         long failedDelta = failedNow - lastFailed;
         lastFailed = failedNow;
-        double throughput = seconds > 0 ? ops / seconds : 0;
-        double p50 = ops > 0 ? intervalRecycle.getValueAtPercentile(50) : 0;
-        double p99 = ops > 0 ? intervalRecycle.getValueAtPercentile(99) : 0;
-        double max = ops > 0 ? intervalRecycle.getMaxValue() : 0;
-        return new IntervalStats(seconds, ops, throughput, p50, p99, max, failedDelta);
+        return new IntervalStats(
+                seconds > 0 ? ops / seconds : 0,
+                ops > 0 ? intervalRecycle.getValueAtPercentile(50) : 0,
+                ops > 0 ? intervalRecycle.getValueAtPercentile(99) : 0,
+                ops > 0 ? intervalRecycle.getMaxValue() : 0,
+                failedDelta);
     }
 
-    /** One interval's foreground metrics. */
-    public record IntervalStats(
-            double seconds,
-            long ops,
-            double throughput,
-            double p50,
-            double p99,
-            double max,
-            long failed) {}
-
-    /**
-     * Pre-build foreground keys ("k-" + 16-digit index), matching the throughput benchmark scheme.
-     */
-    private static String[] buildKeys(long keyspaceSize) {
-        String[] keys = new String[(int) keyspaceSize];
-        char[] c = new char[18];
-        c[0] = 'k';
-        c[1] = '-';
-        for (int i = 0; i < keys.length; i++) {
-            long n = i;
-            for (int j = 17; j >= 2; j--) {
-                c[j] = (char) ('0' + (int) (n % 10));
-                n /= 10;
-            }
-            keys[i] = new String(c);
-        }
-        return keys;
-    }
+    /** One interval's foreground metrics (latencies in ms). */
+    public record IntervalStats(double throughput, double p50, double p99, double max, long failed) {}
 }

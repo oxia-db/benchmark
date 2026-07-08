@@ -19,6 +19,10 @@ import io.oxia.benchmark.driver.consul.ConsulDriver;
 import io.oxia.benchmark.driver.etcd.EtcdDriver;
 import io.oxia.benchmark.driver.oxia.OxiaDriver;
 import io.oxia.benchmark.driver.redis.RedisDriver;
+import io.oxia.benchmark.driver.session.SessionDriver;
+import io.oxia.benchmark.driver.session.etcd.EtcdSessionDriver;
+import io.oxia.benchmark.driver.session.oxia.OxiaSessionDriver;
+import io.oxia.benchmark.driver.session.zookeeper.ZooKeeperSessionDriver;
 import io.oxia.benchmark.driver.tikv.TiKVDriver;
 import io.oxia.benchmark.driver.zookeeper.ZooKeeperDriver;
 import java.io.IOException;
@@ -44,6 +48,28 @@ public final class DriverFactory {
         if (conf.label() != null && !conf.label().isEmpty()) {
             return new LabeledDriver(driver, conf.label());
         }
+        return driver;
+    }
+
+    /**
+     * Session-capable variant for the session/ephemeral experiments. Only the backends with a real
+     * session model are supported; the KV-only ones (Redis, TiKV, Consul) have no session contract.
+     * The optional config label is applied to the result by the caller rather than via a wrapper.
+     */
+    public static SessionDriver buildSession(DriverConfig conf) throws Exception {
+        SessionDriver driver =
+                switch (conf.driver()) {
+                    case "oxia" -> new OxiaSessionDriver();
+                    case "etcd" -> new EtcdSessionDriver();
+                    case "zookeeper" -> new ZooKeeperSessionDriver();
+                    default ->
+                            throw new IllegalArgumentException(
+                                    "Driver '"
+                                            + conf.driver()
+                                            + "' has no session/ephemeral model; session experiments support"
+                                            + " oxia, etcd, zookeeper");
+                };
+        driver.init(conf.config());
         return driver;
     }
 

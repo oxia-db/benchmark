@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.CustomLog;
 
 /**
@@ -44,11 +45,8 @@ import lombok.CustomLog;
  *       session and its ephemerals immediately.
  *   <li><b>Abrupt kill</b> — {@link OxiaSessionInternals#kill} cancels the KeepAlive task and shuts
  *       down the gRPC channel <em>without</em> {@code close()}, so no CloseSession is sent and the
- *       server reaps the session only via heartbeat-timeout expiry. This reaches SDK internals
- *       reflectively (pinned to the oxia-client version in build.gradle.kts); it is the only
- *       faithful way to simulate a crashed client, and the reflection is isolated and fails loudly
- *       if the internals move.
- *   <li><b>Watch</b> — Oxia notifications are a per-client global feed, so one observer client
+ *       server reaps the session only via heartbeat-timeout expiry.
+ *   <li><b>Watch</b> — Oxia notifications are a per-client global feed, so the shared client
  *       streams them and we filter by prefix client-side (Oxia has no server-side prefix scoping
  *       for notifications — a disclosed difference from etcd's native prefix watch).
  * </ul>
@@ -60,8 +58,8 @@ public class OxiaSessionDriver implements SessionDriver {
     private String namespace;
     private int batchMaxCount;
 
-    private AsyncOxiaClient foreground; // foreground load + exists() probes
-    private AsyncOxiaClient observer; // notification feed
+    private AsyncOxiaClient client; // foreground load + exists() probes + notification feed
+    private final AtomicBoolean notificationsStarted = new AtomicBoolean();
     private final CopyOnWriteArrayList<PrefixWatch> watches = new CopyOnWriteArrayList<>();
 
     @Override
@@ -76,17 +74,12 @@ public class OxiaSessionDriver implements SessionDriver {
         namespace = (String) config.get("namespace");
         batchMaxCount =
                 config.containsKey("batchMaxCount") ? ((Number) config.get("batchMaxCount")).intValue() : 0;
-
-        foreground = baseBuilder("foreground").asyncClient().get();
-        observer = baseBuilder("observer").asyncClient().get();
-        // Register the global notification feed once; watchPrefix() just adds a prefix filter.
-        observer.notifications(this::dispatch);
+        client = builder("bench-fg").asyncClient().get();
     }
 
-    private OxiaClientBuilder baseBuilder(String idSuffix) {
+    private OxiaClientBuilder builder(String clientIdentifier) {
         OxiaClientBuilder b =
-                OxiaClientBuilder.create(serviceAddress)
-                        .clientIdentifier("bench-" + idSuffix + "-" + System.identityHashCode(this));
+                OxiaClientBuilder.create(serviceAddress).clientIdentifier(clientIdentifier);
         if (namespace != null) {
             b.namespace(namespace);
         }
@@ -98,35 +91,28 @@ public class OxiaSessionDriver implements SessionDriver {
 
     @Override
     public CompletableFuture<Void> put(String key, byte[] value) {
-        return foreground.put(key, value).thenApply(r -> null);
+        return client.put(key, value).thenApply(r -> null);
     }
 
     @Override
     public CompletableFuture<Void> get(String key) {
-        return foreground.get(key).thenApply(r -> null);
+        return client.get(key).thenApply(r -> null);
     }
 
     @Override
     public CompletableFuture<SessionHandle> createSession(long logicalId, Duration timeout) {
         // One client == one session. The server-side session is created lazily on the first ephemeral
         // put; establish latency (S2) is measured over createSession + the first putEphemeral together.
-        OxiaClientBuilder b =
-                OxiaClientBuilder.create(serviceAddress)
-                        .sessionTimeout(timeout)
-                        .clientIdentifier("bench-sess-" + logicalId);
-        if (namespace != null) {
-            b.namespace(namespace);
-        }
-        if (batchMaxCount > 0) {
-            b.maxRequestsPerBatch(batchMaxCount);
-        }
-        return b.asyncClient().thenApply(client -> new OxiaSessionHandle(logicalId, client));
+        return builder("bench-sess-" + logicalId)
+                .sessionTimeout(timeout)
+                .asyncClient()
+                .thenApply(c -> (SessionHandle) new OxiaSessionHandle(logicalId, c));
     }
 
     @Override
     public CompletableFuture<Void> putEphemeral(SessionHandle session, String key, byte[] value) {
-        AsyncOxiaClient client = ((OxiaSessionHandle) session).client;
-        return client.put(key, value, Set.of(PutOption.AsEphemeralRecord)).thenApply(r -> null);
+        AsyncOxiaClient c = ((OxiaSessionHandle) session).client;
+        return c.put(key, value, Set.of(PutOption.AsEphemeralRecord)).thenApply(r -> null);
     }
 
     @Override
@@ -152,30 +138,28 @@ public class OxiaSessionDriver implements SessionDriver {
     @Override
     public CompletableFuture<Boolean> exists(String key) {
         // Oxia's get() resolves to null when the key is absent (no exception).
-        return foreground.get(key).thenApply(r -> r != null);
+        return client.get(key).thenApply(r -> r != null);
     }
 
     @Override
     public Closeable watchPrefix(String prefix, PrefixListener listener) {
+        // Start the global notification stream once, on first use.
+        if (notificationsStarted.compareAndSet(false, true)) {
+            client.notifications(this::dispatch);
+        }
         PrefixWatch w = new PrefixWatch(prefix, listener);
         watches.add(w);
         return () -> watches.remove(w);
     }
 
     private void dispatch(Notification n) {
-        if (watches.isEmpty()) {
+        if (!(n instanceof Notification.KeyDeleted) || watches.isEmpty()) {
             return;
         }
         long now = System.nanoTime();
-        String key = n.key();
-        boolean deleted = n instanceof Notification.KeyDeleted;
         for (PrefixWatch w : watches) {
-            if (key.startsWith(w.prefix)) {
-                if (deleted) {
-                    w.listener.onKeyDeleted(key, now);
-                } else {
-                    w.listener.onKeyCreated(key, now);
-                }
+            if (n.key().startsWith(w.prefix)) {
+                w.listener.onKeyDeleted(n.key(), now);
             }
         }
     }
@@ -183,11 +167,8 @@ public class OxiaSessionDriver implements SessionDriver {
     @Override
     public void close() throws IOException {
         try {
-            if (observer != null) {
-                observer.close();
-            }
-            if (foreground != null) {
-                foreground.close();
+            if (client != null) {
+                client.close();
             }
         } catch (Exception e) {
             throw new IOException(e);
@@ -197,12 +178,6 @@ public class OxiaSessionDriver implements SessionDriver {
     private record PrefixWatch(String prefix, PrefixListener listener) {}
 
     /** Oxia session state: its dedicated client. */
-    private static final class OxiaSessionHandle extends SessionHandle {
-        private final AsyncOxiaClient client;
-
-        OxiaSessionHandle(long logicalId, AsyncOxiaClient client) {
-            super(logicalId);
-            this.client = client;
-        }
-    }
+    private record OxiaSessionHandle(long logicalId, AsyncOxiaClient client)
+            implements SessionHandle {}
 }

@@ -15,8 +15,8 @@
  */
 package io.oxia.benchmark.session;
 
-import io.oxia.benchmark.driver.session.PrefixListener;
 import io.oxia.benchmark.driver.session.SessionDriver;
+import io.oxia.benchmark.runner.UniformRateLimiter;
 import io.oxia.benchmark.session.SessionResult.CapacityPoint;
 import io.oxia.benchmark.session.SessionResult.ChurnPoint;
 import io.oxia.benchmark.session.SessionResult.CleanupTrial;
@@ -24,16 +24,13 @@ import io.oxia.benchmark.session.SessionResult.StormRun;
 import io.oxia.benchmark.session.SessionResult.StormSample;
 import java.io.Closeable;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 import lombok.CustomLog;
 import org.HdrHistogram.DoubleHistogram;
@@ -41,17 +38,15 @@ import org.HdrHistogram.DoubleRecorder;
 
 /**
  * Runs one {@link SessionExperiment} (S1–S4) against a {@link SessionDriver} and returns a {@link
- * SessionResult}. The orchestration runs on this one thread and drives thousands of sessions
- * through the async {@link SessionPool}; the sessions themselves are never thread-backed. Every
- * experiment uses the identical session timeout and ephemeral count from the config, so results are
- * comparable across backends.
+ * SessionResult}. The orchestration runs synchronously on this one thread and drives thousands of
+ * sessions through the async {@link SessionPool}; the sessions themselves are never thread-backed.
+ * Every experiment uses the identical session timeout and ephemeral count from the config, so
+ * results are comparable across backends.
  */
 @CustomLog
 public class SessionExperimentRunner {
 
-    /**
-     * Fine cadence for the S3 first-absent-read probe; sub-{@code sampleIntervalMs} for tight t_gone.
-     */
+    /** Cadence of the S3 first-absent-read probe (t_gone). */
     private static final long GONE_POLL_MS = 25;
 
     private final SessionExperiment exp;
@@ -59,11 +54,7 @@ public class SessionExperimentRunner {
     private final String instanceId;
     private final SessionKeys keys;
     private final Duration timeout;
-    private final Duration settle;
     private final int concurrency;
-    private final int k;
-    private final int ephemeralValueSize;
-    private ScheduledExecutorService scheduler;
 
     public SessionExperimentRunner(SessionExperiment exp, SessionDriver driver, String instanceId) {
         this.exp = exp;
@@ -72,10 +63,7 @@ public class SessionExperimentRunner {
         // Namespace keys per worker so multiple workers against one cluster never collide.
         this.keys = new SessionKeys(exp.keyPrefix() + "/" + this.instanceId);
         this.timeout = exp.sessionTimeout();
-        this.settle = exp.warmup().isZero() ? Duration.ofSeconds(3) : exp.warmup();
         this.concurrency = exp.createConcurrency();
-        this.k = exp.ephemeralsPerSession();
-        this.ephemeralValueSize = exp.ephemeralValueSize();
     }
 
     public SessionResult run() throws Exception {
@@ -88,32 +76,21 @@ public class SessionExperimentRunner {
         r.driver = driver.name();
         r.sessionTimeout = exp.sessionTimeout().toString();
         r.sessionTimeoutMs = timeout.toMillis();
-        r.ephemeralsPerSession = k;
+        r.ephemeralsPerSession = exp.ephemeralsPerSession();
 
-        scheduler =
-                Executors.newScheduledThreadPool(
-                        2,
-                        runnable -> {
-                            Thread t = new Thread(runnable, "session-probe");
-                            t.setDaemon(true);
-                            return t;
-                        });
-        try {
-            switch (exp.type()) {
-                case "S1" -> runCapacity(r);
-                case "S2" -> runChurn(r);
-                case "S3" -> runCleanup(r);
-                case "S4" -> runStorm(r);
-                default -> throw new IllegalArgumentException("unknown experiment type: " + exp.type());
-            }
-        } finally {
-            scheduler.shutdownNow();
+        switch (exp.type()) {
+            case "S1" -> runCapacity(r);
+            case "S2" -> runChurn(r);
+            case "S3" -> runCleanup(r);
+            case "S4" -> runStorm(r);
+            default -> throw new IllegalArgumentException("unknown experiment type: " + exp.type());
         }
         return r;
     }
 
     private SessionPool newPool() {
-        return new SessionPool(driver, keys, k, timeout, ephemeralValueSize);
+        return new SessionPool(
+                driver, keys, exp.ephemeralsPerSession(), timeout, exp.ephemeralValueSize());
     }
 
     private ForegroundLoad newForeground() {
@@ -124,8 +101,7 @@ public class SessionExperimentRunner {
                 exp.foregroundKeyspaceSize(),
                 exp.foregroundKeyDistribution(),
                 exp.foregroundValueSize(),
-                exp.foregroundParallelism(),
-                10_000);
+                exp.foregroundParallelism());
     }
 
     // ---- S1 capacity ----------------------------------------------------------------------------
@@ -138,37 +114,37 @@ public class SessionExperimentRunner {
         sleep(exp.warmup());
 
         // Baseline: foreground alone (N=0). This anchors both throughput degradation and footprint.
-        Footprint baseFp = FootprintSampler.sample();
+        Footprint baseFp = Footprint.sample();
         fg.snapshotInterval(); // reset window
         sleep(exp.holdDuration());
         ForegroundLoad.IntervalStats base = fg.snapshotInterval();
         double baseline = base.throughput();
-        r.capacity.add(capacityPoint(0, base, 0.0, baseFp.minus(baseFp).per10k(1)));
+        r.capacity.add(capacityPoint(0, base, 0.0, baseFp.minus(baseFp)));
         log.info()
                 .attr("baselineThroughput", String.format("%.0f", baseline))
                 .attr("baselineP99", String.format("%.1f", base.p99()))
                 .log("S1 baseline (N=0) measured");
 
         for (long n : exp.sessionsSweep()) {
-            join(pool.rampTo(n, concurrency));
-            sleep(settle);
+            pool.rampTo(n, concurrency);
+            sleep(exp.warmup()); // let heartbeat/connection churn settle before measuring
             fg.snapshotInterval(); // reset window
             sleep(exp.holdDuration());
             ForegroundLoad.IntervalStats s = fg.snapshotInterval();
-            Footprint delta = FootprintSampler.sample().minus(baseFp);
+            Footprint per10k = Footprint.sample().minus(baseFp).per10k(n);
             double degradation = baseline > 0 ? (baseline - s.throughput()) / baseline * 100.0 : 0.0;
-            r.capacity.add(capacityPoint(n, s, degradation, delta.per10k(n)));
+            r.capacity.add(capacityPoint(n, s, degradation, per10k));
             log.info()
                     .attr("N", n)
                     .attr("throughput", String.format("%.0f", s.throughput()))
                     .attr("p99ms", String.format("%.1f", s.p99()))
                     .attr("degradationPct", String.format("%.1f", degradation))
-                    .attr("threadsPer10k", delta.per10k(n).threads())
-                    .attr("heapMBPer10k", String.format("%.1f", delta.per10k(n).heapMB()))
+                    .attr("threadsPer10k", per10k.threads())
+                    .attr("heapMBPer10k", String.format("%.1f", per10k.heapMB()))
                     .log("S1 sweep point");
         }
         fg.stop();
-        join(pool.closeAll(concurrency));
+        pool.closeAll(concurrency);
     }
 
     private CapacityPoint capacityPoint(
@@ -196,41 +172,38 @@ public class SessionExperimentRunner {
         ForegroundLoad fg = newForeground();
         fg.start();
         sleep(exp.warmup());
-        // One pool for the whole sweep so session ids (and thus ephemeral keys) stay globally unique:
-        // a fresh pool per rate would reset the id counter and could collide with keys still expiring
-        // from a previous rate's abandoned sessions. Reset the population between rates via closeAll.
+        // One pool for the whole sweep so session ids (and thus ephemeral keys) stay globally unique
+        // even while keys from a previous rate's abandoned sessions are still expiring server-side.
         SessionPool pool = newPool();
         for (double rate : exp.churnRateSweep()) {
             r.churn.add(runChurnRate(pool, rate, graceful));
-            join(pool.closeAll(concurrency));
+            pool.closeAll(concurrency);
         }
         fg.stop();
     }
 
     private ChurnPoint runChurnRate(SessionPool pool, double rate, boolean graceful) {
         Semaphore inFlight = new Semaphore(concurrency);
-        java.util.ArrayDeque<Long> order = new java.util.ArrayDeque<>();
+        ArrayDeque<Long> order = new ArrayDeque<>();
         DoubleRecorder establish = new DoubleRecorder(3);
         LongAdder created = new LongAdder();
         LongAdder failed = new LongAdder();
         LongAdder departed = new LongAdder();
-        AtomicLong fellBehind = new AtomicLong();
+        long fellBehind = 0;
 
-        io.oxia.benchmark.runner.UniformRateLimiter limiter =
-                new io.oxia.benchmark.runner.UniformRateLimiter(rate);
+        UniformRateLimiter limiter = new UniformRateLimiter(rate);
         long startNanos = System.nanoTime();
         long endNanos = startNanos + exp.holdDuration().toNanos();
 
         while (System.nanoTime() < endNanos) {
-            long intended = limiter.acquire();
-            io.oxia.benchmark.runner.UniformRateLimiter.sleepUntil(intended);
+            UniformRateLimiter.sleepUntil(limiter.acquire());
             if (System.nanoTime() >= endNanos) {
                 break;
             }
             // Bound in-flight establishes; failing to get a permit means the system can't keep up at
             // this rate (the latency knee) — count it and skip so achieved-rate reflects reality.
             if (!inFlight.tryAcquire()) {
-                fellBehind.incrementAndGet();
+                fellBehind++;
                 continue;
             }
             long id = pool.nextId();
@@ -264,8 +237,7 @@ public class SessionExperimentRunner {
         }
         // Let in-flight establishes drain so their latencies land in the histogram.
         try {
-            inFlight.tryAcquire(
-                    concurrency, timeout.toMillis() + settle.toMillis(), TimeUnit.MILLISECONDS);
+            inFlight.tryAcquire(concurrency, timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -276,7 +248,7 @@ public class SessionExperimentRunner {
         p.targetRate = rate;
         p.established = created.sum();
         p.establishFailed = failed.sum();
-        p.fellBehind = fellBehind.get();
+        p.fellBehind = fellBehind;
         p.achievedCreateRate = seconds > 0 ? created.sum() / seconds : 0;
         p.achievedDepartRate = seconds > 0 ? departed.sum() / seconds : 0;
         p.establishP50 = h.getTotalCount() > 0 ? h.getValueAtPercentile(50) : 0;
@@ -297,7 +269,7 @@ public class SessionExperimentRunner {
     private void runCleanup(SessionResult r) {
         r.cleanupTrials = new ArrayList<>();
         SessionPool pool = newPool();
-        join(pool.rampTo(exp.backgroundSessions(), concurrency));
+        pool.rampTo(exp.backgroundSessions(), concurrency);
         log.info().attr("background", pool.size()).log("S3 background pool live; running idle trials");
         runCleanupPhase(r, pool, "idle");
 
@@ -309,35 +281,27 @@ public class SessionExperimentRunner {
             runCleanupPhase(r, pool, "load");
             fg.stop();
         }
-        join(pool.closeAll(concurrency));
+        pool.closeAll(concurrency);
     }
 
     private void runCleanupPhase(SessionResult r, SessionPool pool, String load) {
         long budgetNanos = timeout.toNanos() + exp.settleTimeout().toNanos();
         for (int trial = 0; trial < exp.trials(); trial++) {
             long id = pool.nextId();
-            join(pool.establish(id)); // target session live with k ephemerals
+            pool.establish(id).join(); // target session live with k ephemerals
 
             // Arm the native change feed on the target's parent, capturing the first deletion time.
             CompletableFuture<Long> notify = new CompletableFuture<>();
             Closeable watch =
-                    driver.watchPrefix(
-                            keys.parent(id),
-                            new PrefixListener() {
-                                @Override
-                                public void onKeyDeleted(String key, long atNanos) {
-                                    notify.complete(atNanos);
-                                }
-                            });
-            sleep(Duration.ofMillis(200)); // let the watch arm and heartbeats settle
+                    driver.watchPrefix(keys.parent(id), (key, atNanos) -> notify.complete(atNanos));
+            sleepMs(200); // let the watch arm and heartbeats settle
 
             String probeKey = keys.ephemeral(id, 0);
             long tHb = System.nanoTime(); // last heartbeat instant (upper bound; see README)
-            join(pool.kill(id)); // abrupt: heartbeats stop now, no goodbye
+            pool.kill(id).join(); // abrupt: heartbeats stop now, no goodbye
 
             long deadline = tHb + budgetNanos;
-            CompletableFuture<Long> gone = pollGone(probeKey, deadline);
-            Long tGone = await(gone, deadline);
+            Long tGone = pollGone(probeKey, deadline);
             Long tNotify = await(notify, deadline);
             closeQuietly(watch);
 
@@ -368,38 +332,20 @@ public class SessionExperimentRunner {
     }
 
     /**
-     * Poll a key until a read returns absent, or the deadline passes; completes with the nano time.
+     * Poll a key until a read returns absent or the deadline passes; null if it never went absent.
      */
-    private CompletableFuture<Long> pollGone(String key, long deadlineNanos) {
-        CompletableFuture<Long> result = new CompletableFuture<>();
-        scheduleGoneCheck(key, deadlineNanos, result);
-        return result;
-    }
-
-    private void scheduleGoneCheck(String key, long deadlineNanos, CompletableFuture<Long> result) {
-        if (result.isDone()) {
-            return;
+    private Long pollGone(String key, long deadlineNanos) {
+        while (System.nanoTime() < deadlineNanos) {
+            try {
+                if (!driver.exists(key).join()) {
+                    return System.nanoTime();
+                }
+            } catch (Exception e) {
+                // transient read failure: keep polling until the deadline
+            }
+            sleepMs(GONE_POLL_MS);
         }
-        if (System.nanoTime() >= deadlineNanos) {
-            result.complete(null);
-            return;
-        }
-        driver
-                .exists(key)
-                .whenComplete(
-                        (present, ex) -> {
-                            if (result.isDone()) {
-                                return;
-                            }
-                            if (ex == null && !present) {
-                                result.complete(System.nanoTime());
-                            } else {
-                                scheduler.schedule(
-                                        () -> scheduleGoneCheck(key, deadlineNanos, result),
-                                        GONE_POLL_MS,
-                                        TimeUnit.MILLISECONDS);
-                            }
-                        });
+        return null;
     }
 
     // ---- S4 expiry storm ------------------------------------------------------------------------
@@ -413,8 +359,8 @@ public class SessionExperimentRunner {
         sleep(exp.warmup());
 
         for (double fraction : exp.killFractionSweep()) {
-            join(pool.rampTo(n, concurrency)); // refill after the previous fraction's kills
-            sleep(settle);
+            pool.rampTo(n, concurrency); // refill after the previous fraction's kills
+            sleep(exp.warmup());
 
             List<Long> liveIds = pool.liveIds();
             int killCount = (int) Math.min(liveIds.size(), Math.round(fraction * n));
@@ -429,7 +375,8 @@ public class SessionExperimentRunner {
 
             fg.snapshotInterval(); // reset just before the storm
             long t0 = System.nanoTime();
-            CompletableFuture<Void> killDone = pool.killIds(killIds, concurrency);
+            CompletableFuture<Void> killDone =
+                    CompletableFuture.runAsync(() -> pool.killIds(killIds, concurrency));
             log.info()
                     .attr("killFraction", fraction)
                     .attr("killed", killIds.size())
@@ -451,7 +398,7 @@ public class SessionExperimentRunner {
                     break;
                 }
             }
-            join(killDone);
+            killDone.join();
             r.storm.add(sr);
             log.info()
                     .attr("killFraction", fraction)
@@ -459,26 +406,25 @@ public class SessionExperimentRunner {
                     .log("S4 fraction complete");
         }
         fg.stop();
-        join(pool.closeAll(concurrency));
+        pool.closeAll(concurrency);
     }
 
     /** Count how many of the sampled keys currently read as absent (bounded-concurrency probe). */
     private int countAbsent(List<String> sampled) {
         AtomicInteger absent = new AtomicInteger();
-        join(
-                AsyncBatch.run(
-                        sampled,
-                        concurrency,
-                        key ->
-                                driver
-                                        .exists(key)
-                                        .thenAccept(
-                                                present -> {
-                                                    if (!present) {
-                                                        absent.incrementAndGet();
-                                                    }
-                                                }),
-                        (key, ex) -> {}));
+        AsyncBatch.run(
+                sampled,
+                concurrency,
+                key ->
+                        driver
+                                .exists(key)
+                                .thenAccept(
+                                        present -> {
+                                            if (!present) {
+                                                absent.incrementAndGet();
+                                            }
+                                        }),
+                (key, ex) -> {});
         return absent.get();
     }
 
@@ -515,17 +461,11 @@ public class SessionExperimentRunner {
         }
     }
 
-    private static <T> T join(CompletableFuture<T> f) {
-        return f.join();
-    }
-
     /** Await a future's value up to the deadline, returning null on timeout/failure. */
     private static Long await(CompletableFuture<Long> f, long deadlineNanos) {
         long remainingMs = Math.max(0, (deadlineNanos - System.nanoTime()) / 1_000_000) + 100;
         try {
             return f.get(remainingMs, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            return null;
         } catch (Exception e) {
             return null;
         }

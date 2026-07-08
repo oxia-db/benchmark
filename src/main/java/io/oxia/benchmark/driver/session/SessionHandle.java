@@ -16,26 +16,13 @@
 package io.oxia.benchmark.driver.session;
 
 /**
- * Opaque handle to a live session (Oxia session / ZooKeeper connection / etcd lease). Created by
- * {@link SessionDriver#createSession}, it is the token passed back to attach ephemeral keys and to
- * close or kill the session. Implementations subclass this to stash their backend state (client,
- * lease id, znode parent), so the runner and pool stay backend-agnostic.
+ * Opaque handle to a live session (Oxia session / ZooKeeper connection / etcd lease), returned by
+ * {@link SessionDriver#createSession} and passed back to attach ephemeral keys and to close or kill
+ * the session. Drivers implement it with a record carrying their backend state (client, lease id),
+ * so the runner and pool stay backend-agnostic.
  */
-public abstract class SessionHandle {
-
-    private final long logicalId;
-
-    protected SessionHandle(long logicalId) {
-        this.logicalId = logicalId;
-    }
+public interface SessionHandle {
 
     /** The pool-assigned logical id, unique within a worker; drives this session's key namespace. */
-    public final long logicalId() {
-        return logicalId;
-    }
-
-    /** The backend-native session/lease id if known, else -1. For logging/diagnostics only. */
-    public long backendId() {
-        return -1;
-    }
+    long logicalId();
 }

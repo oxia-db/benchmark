@@ -228,8 +228,8 @@ java -jar build/libs/oxia-benchmark-*-all.jar session-report --results-dir resul
 
 | ID | Name | What it does | Headline metric | Output |
 |----|------|--------------|-----------------|--------|
-| **S1** | Capacity | Fixed YCSB-A-style foreground load at ~50% of the system's own saturation; sweep live sessions N = 10k/50k/100k/500k | Max N with **<5% foreground throughput degradation**; foreground p99 and client footprint vs N | Time series (`session-s1.csv`) + headline (`session-s1-headline.csv`) |
-| **S2** | Churn | Steady *r* sessions/s established (create + write *k* ephemerals) and *r* departing; sweep *r* to the latency knee; departure = graceful close **or** abandon (server-side expiry) | Max sustainable churn; p99 session-establish latency vs *r* | Per-rate rows (`session-s2.csv`) + headline (`session-s2-headline.csv`) |
+| **S1** | Capacity | Fixed YCSB-A-style foreground load at ~50% of the system's own saturation; sweep live sessions N = 10k/50k/100k/500k | Max N with **<5% foreground throughput degradation**; foreground p99 and client footprint vs N | Time series (`session-s1.csv`) |
+| **S2** | Churn | Steady *r* sessions/s established (create + write *k* ephemerals) and *r* departing; sweep *r* to the latency knee; departure = graceful close **or** abandon (server-side expiry) | Max sustainable churn; p99 session-establish latency vs *r* | Per-rate rows (`session-s2.csv`) |
 | **S3** | Cleanup-visibility | With N background sessions live, kill one client abruptly; observe when its ephemerals disappear | **EXCESS = t_notify − (t_hb + timeout)** — latency *beyond* the contractual deadline; also dispatch = t_notify − t_gone. ≥100 trials at idle and at ~80% load | One row per trial (`session-s3.csv`), CDF-ready |
 | **S4** | Expiry storm | 100k live sessions (*k* ephemerals each); kill 10% / 50% / 100% of clients simultaneously | Cleanup completion curve (fraction of ephemerals deleted vs time, sub-second) and foreground throughput/p99 over the same timeline | Time series per kill fraction (`session-s4.csv`) |
 

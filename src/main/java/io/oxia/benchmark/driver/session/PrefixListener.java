@@ -16,17 +16,12 @@
 package io.oxia.benchmark.driver.session;
 
 /**
- * Callback for {@link SessionDriver#watchPrefix} — the native change feed of each system,
- * normalized to key create/delete events. The cleanup-visibility experiment (S3) cares about
- * deletions: when a session expires, the server tombstones its ephemeral keys and the change feed
- * reports each removal. {@code atNanos} is the observer's {@link System#nanoTime()} at delivery, so
- * latency is measured on one clock.
+ * Callback for {@link SessionDriver#watchPrefix} — each system's native change feed, reduced to the
+ * one event the experiments consume: a key under the watched prefix was deleted (the server removed
+ * an ephemeral when its session closed or expired). {@code atNanos} is the observer's {@link
+ * System#nanoTime()} at delivery, so latency is measured on one clock.
  */
 public interface PrefixListener {
 
-    /** A key under the watched prefix was deleted (e.g. ephemeral removed on session expiry). */
     void onKeyDeleted(String key, long atNanos);
-
-    /** A key under the watched prefix was created. Most experiments ignore this. */
-    default void onKeyCreated(String key, long atNanos) {}
 }

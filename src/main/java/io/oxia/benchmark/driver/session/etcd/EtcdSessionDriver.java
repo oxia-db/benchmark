@@ -154,7 +154,8 @@ public class EtcdSessionDriver implements SessionDriver {
     @Override
     public Closeable watchPrefix(String prefix, PrefixListener listener) {
         ByteSequence p = ByteSequence.from(prefix, StandardCharsets.UTF_8);
-        WatchOption opt = WatchOption.builder().isPrefix(true).build();
+        // Only deletions are consumed, so ask the server not to stream puts at all.
+        WatchOption opt = WatchOption.builder().isPrefix(true).withNoPut(true).build();
         Watch.Watcher watcher =
                 watchClient.watch(
                         p,
@@ -162,11 +163,9 @@ public class EtcdSessionDriver implements SessionDriver {
                         response -> {
                             long now = System.nanoTime();
                             for (WatchEvent event : response.getEvents()) {
-                                String key = event.getKeyValue().getKey().toString(StandardCharsets.UTF_8);
                                 if (event.getEventType() == WatchEvent.EventType.DELETE) {
-                                    listener.onKeyDeleted(key, now);
-                                } else if (event.getEventType() == WatchEvent.EventType.PUT) {
-                                    listener.onKeyCreated(key, now);
+                                    listener.onKeyDeleted(
+                                            event.getKeyValue().getKey().toString(StandardCharsets.UTF_8), now);
                                 }
                             }
                         });
@@ -190,21 +189,8 @@ public class EtcdSessionDriver implements SessionDriver {
     }
 
     /** etcd session state: the lease id and its keep-alive stream. */
-    private static final class EtcdSessionHandle extends SessionHandle {
-        private final long leaseId;
-        private final CloseableClient keepAlive;
-
-        EtcdSessionHandle(long logicalId, long leaseId, CloseableClient keepAlive) {
-            super(logicalId);
-            this.leaseId = leaseId;
-            this.keepAlive = keepAlive;
-        }
-
-        @Override
-        public long backendId() {
-            return leaseId;
-        }
-    }
+    private record EtcdSessionHandle(long logicalId, long leaseId, CloseableClient keepAlive)
+            implements SessionHandle {}
 
     /**
      * The keep-alive responses carry the server-echoed TTL; the benchmark drives expiry by opening

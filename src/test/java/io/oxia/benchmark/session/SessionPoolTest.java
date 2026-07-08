@@ -35,23 +35,22 @@ class SessionPoolTest {
         SessionKeys keys = new SessionKeys("bench/sess");
         SessionPool pool = new SessionPool(driver, keys, 10, Duration.ofSeconds(1), 16);
 
-        pool.rampTo(20, 8).join();
+        pool.rampTo(20, 8);
 
         assertThat(pool.size()).isEqualTo(20);
         assertThat(pool.liveIds()).hasSize(20);
         // 20 sessions * 10 ephemerals each are present.
         assertThat(driver.presentCount()).isEqualTo(200);
-        assertThat(pool.establishFailures()).isZero();
     }
 
     @Test
     void killRemovesFromPoolAndExpiresKeysAfterTimeout() throws Exception {
         SessionKeys keys = new SessionKeys("bench/sess");
         SessionPool pool = new SessionPool(driver, keys, 1, Duration.ofMillis(200), 16);
-        pool.rampTo(10, 8).join();
+        pool.rampTo(10, 8);
         assertThat(driver.presentCount()).isEqualTo(10);
 
-        pool.killIds(pool.liveIds().subList(0, 4), 8).join();
+        pool.killIds(pool.liveIds().subList(0, 4), 8);
 
         // Killed sessions leave the pool immediately, but their keys survive until expiry.
         assertThat(pool.size()).isEqualTo(6);
@@ -65,10 +64,10 @@ class SessionPoolTest {
     void closeRemovesKeysImmediately() {
         SessionKeys keys = new SessionKeys("bench/sess");
         SessionPool pool = new SessionPool(driver, keys, 2, Duration.ofSeconds(5), 16);
-        pool.rampTo(5, 4).join();
+        pool.rampTo(5, 4);
         assertThat(driver.presentCount()).isEqualTo(10);
 
-        pool.closeAll(4).join();
+        pool.closeAll(4);
 
         assertThat(pool.size()).isZero();
         assertThat(driver.presentCount())

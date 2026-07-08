@@ -41,7 +41,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * <p>Sessions are async state machines driven from a shared pool (no thread per session). Handles
  * are cheap tokens; the backend cost (sockets, threads) is measured, not hidden — see {@code
- * FootprintSampler}.
+ * Footprint}.
  */
 public interface SessionDriver extends KVStoreDriver {
 

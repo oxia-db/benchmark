@@ -29,17 +29,14 @@ import lombok.CustomLog;
 
 /**
  * A pool of live sessions run as async state machines — never a thread per session. Each session's
- * lifecycle (establish → live+heartbeating → close/kill) is driven by the backend's own async ops
- * and the {@link AsyncBatch} fan-out; the pool just tracks live handles and rounds work up to a
- * target count with bounded concurrency. "Establish" is create-session + attach {@code k} ephemeral
- * keys — the unit whose latency S2 measures. Keys are derived from the session id via {@link
- * SessionKeys}, so a killed session's keys are reconstructable without its handle (needed by
- * S3/S4).
+ * lifecycle (establish → live+heartbeating → close/kill) is driven by the backend's own async ops;
+ * the pool tracks live handles and fans work out with bounded concurrency via {@link AsyncBatch}.
+ * "Establish" is create-session + attach {@code k} ephemeral keys — the unit whose latency S2
+ * measures. Keys derive from the session id via {@link SessionKeys}, so a killed session's keys are
+ * reconstructable without its handle (needed by S3/S4).
  */
 @CustomLog
 public class SessionPool {
-
-    private static final int MAX_RAMP_ROUNDS = 20;
 
     private final SessionDriver driver;
     private final SessionKeys keys;
@@ -74,10 +71,6 @@ public class SessionPool {
 
     public List<Long> liveIds() {
         return new ArrayList<>(live.keySet());
-    }
-
-    public long establishFailures() {
-        return establishFailures.sum();
     }
 
     /**
@@ -117,65 +110,51 @@ public class SessionPool {
     }
 
     /**
-     * Grow the pool to {@code target} live sessions with at most {@code concurrency} establishes in
-     * flight.
+     * Grow to {@code target} live sessions with at most {@code concurrency} establishes in flight.
      */
-    public CompletableFuture<Void> rampTo(long target, int concurrency) {
-        return rampRound(target, concurrency, 0);
+    public void rampTo(long target, int concurrency) {
+        // A few passes so transient establish failures at scale get retried rather than aborting.
+        for (int round = 0; size() < target && round < 3; round++) {
+            List<Long> ids = new ArrayList<>();
+            for (long i = size(); i < target; i++) {
+                ids.add(nextId());
+            }
+            AsyncBatch.run(
+                    ids,
+                    concurrency,
+                    this::establish,
+                    (id, ex) -> {
+                        establishFailures.increment();
+                        log.debug().attr("id", id).exception(ex).log("Session establish failed");
+                    });
+        }
+        if (size() < target) {
+            throw new IllegalStateException(
+                    "Could only establish "
+                            + size()
+                            + " of "
+                            + target
+                            + " sessions (failures="
+                            + establishFailures.sum()
+                            + ")");
+        }
     }
 
-    private CompletableFuture<Void> rampRound(long target, int concurrency, int round) {
-        long need = target - size();
-        if (need <= 0) {
-            return CompletableFuture.completedFuture(null);
-        }
-        if (round >= MAX_RAMP_ROUNDS) {
-            return CompletableFuture.failedFuture(
-                    new IllegalStateException(
-                            "Could not reach "
-                                    + target
-                                    + " sessions after "
-                                    + round
-                                    + " rounds (have "
-                                    + size()
-                                    + "); establish failures="
-                                    + establishFailures.sum()));
-        }
-        List<Long> ids = new ArrayList<>((int) Math.min(need, Integer.MAX_VALUE));
-        for (long i = 0; i < need; i++) {
-            ids.add(nextId());
-        }
-        return AsyncBatch.run(
-                        ids,
-                        concurrency,
-                        this::establish,
-                        (id, ex) -> {
-                            establishFailures.increment();
-                            log.debug().attr("id", id).exception(ex).log("Session establish failed");
-                        })
-                .thenCompose(v -> rampRound(target, concurrency, round + 1));
-    }
-
-    /** Kill a specific set of live sessions with bounded concurrency (the S4 storm). */
-    public CompletableFuture<Void> killIds(List<Long> ids, int concurrency) {
-        return AsyncBatch.run(
+    /** Abruptly kill a specific set of live sessions with bounded concurrency (the S4 storm). */
+    public void killIds(List<Long> ids, int concurrency) {
+        AsyncBatch.run(
                 ids,
                 concurrency,
                 this::kill,
                 (id, ex) -> log.debug().attr("id", id).exception(ex).log("Session kill failed"));
     }
 
-    /** Gracefully close a specific set of live sessions with bounded concurrency (teardown). */
-    public CompletableFuture<Void> closeIds(List<Long> ids, int concurrency) {
-        return AsyncBatch.run(
-                ids,
+    /** Gracefully close everything still live (teardown between sweep points). */
+    public void closeAll(int concurrency) {
+        AsyncBatch.run(
+                liveIds(),
                 concurrency,
                 this::close,
                 (id, ex) -> log.debug().attr("id", id).exception(ex).log("Session close failed"));
-    }
-
-    /** Gracefully close everything still live (best-effort teardown between sweep points). */
-    public CompletableFuture<Void> closeAll(int concurrency) {
-        return closeIds(liveIds(), concurrency);
     }
 }
