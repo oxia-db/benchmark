@@ -22,20 +22,19 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * One session/ephemeral experiment (S1 capacity, S2 churn, S3 cleanup-visibility, S4 expiry storm).
- * The common fields fix the fairness knobs shared by every backend — identical session timeout,
- * ephemerals-per-session ({@code k}), and key namespace; the per-type fields drive the sweep.
- * Several experiments can be listed in one file and run sequentially, exactly like {@link
- * Workload}s.
+ * One session/ephemeral experiment (S1 capacity, S2 churn). The common fields fix the fairness
+ * knobs shared by every backend — identical session timeout, ephemerals-per-session ({@code k}),
+ * and key namespace; the per-type fields drive the sweep. Several experiments can be listed in one
+ * file and run sequentially, exactly like {@link Workload}s.
  */
 public class SessionExperiment {
 
-    private static final Set<String> VALID_TYPES = Set.of("S1", "S2", "S3", "S4");
+    private static final Set<String> VALID_TYPES = Set.of("S1", "S2");
     private static final Set<String> VALID_DEPARTURES = Set.of("graceful", "abandon");
 
     @JsonProperty private String name;
     @JsonProperty private String description;
-    @JsonProperty private String type; // S1 | S2 | S3 | S4
+    @JsonProperty private String type; // S1 | S2
 
     // ---- shared session parameters (identical across systems for fairness) ----------------------
     @JsonProperty private String sessionTimeout; // default 10s
@@ -45,7 +44,7 @@ public class SessionExperiment {
     @JsonProperty private int createConcurrency; // max in-flight session establishes
     @JsonProperty private String warmup;
 
-    // ---- foreground load (S1 always; S3 load phase; S4 timeline) --------------------------------
+    // ---- foreground load (S1) --------------------------------------------------------------------
     @JsonProperty private double foregroundRate; // ops/s per worker at the measured operating point
     @JsonProperty private double foregroundReadRatio; // YCSB-A-style default 0.5
     @JsonProperty private long foregroundKeyspaceSize;
@@ -60,17 +59,6 @@ public class SessionExperiment {
     // ---- S2 churn -------------------------------------------------------------------------------
     @JsonProperty private List<Double> churnRateSweep; // sessions/s r
     @JsonProperty private String departure; // graceful | abandon
-
-    // ---- S3 cleanup-visibility ------------------------------------------------------------------
-    @JsonProperty private long backgroundSessions; // N live background sessions
-    @JsonProperty private int trials; // per load condition (idle, then ~80% load)
-    @JsonProperty private String settleTimeout; // max wait per trial for gone/notify
-
-    // ---- S4 expiry storm ------------------------------------------------------------------------
-    @JsonProperty private long sessions; // N live sessions before the storm
-    @JsonProperty private List<Double> killFractionSweep; // e.g. 0.1, 0.5, 1.0
-    @JsonProperty private int sampleKeys; // killed keys sampled for the completion curve
-    @JsonProperty private int sampleIntervalMs; // completion-curve sampling resolution
 
     public String name() {
         return name;
@@ -148,34 +136,6 @@ public class SessionExperiment {
         return departure;
     }
 
-    public long backgroundSessions() {
-        return backgroundSessions;
-    }
-
-    public int trials() {
-        return trials;
-    }
-
-    public Duration settleTimeout() {
-        return Workload.parseDuration(settleTimeout);
-    }
-
-    public long sessions() {
-        return sessions;
-    }
-
-    public List<Double> killFractionSweep() {
-        return killFractionSweep == null ? List.of() : killFractionSweep;
-    }
-
-    public int sampleKeys() {
-        return sampleKeys;
-    }
-
-    public int sampleIntervalMs() {
-        return sampleIntervalMs;
-    }
-
     public void applyDefaults() {
         if (sessionTimeout == null || sessionTimeout.isEmpty()) {
             sessionTimeout = "10s";
@@ -213,18 +173,6 @@ public class SessionExperiment {
         if (departure == null || departure.isEmpty()) {
             departure = "graceful";
         }
-        if (trials <= 0) {
-            trials = 100;
-        }
-        if (settleTimeout == null || settleTimeout.isEmpty()) {
-            settleTimeout = "30s";
-        }
-        if (sampleKeys <= 0) {
-            sampleKeys = 2000;
-        }
-        if (sampleIntervalMs <= 0) {
-            sampleIntervalMs = 200;
-        }
     }
 
     public void validate() {
@@ -250,27 +198,6 @@ public class SessionExperiment {
             case "S2" -> {
                 if (churnRateSweep().isEmpty()) {
                     throw new IllegalArgumentException("S2 requires a non-empty churnRateSweep");
-                }
-            }
-            case "S3" -> {
-                if (backgroundSessions <= 0) {
-                    throw new IllegalArgumentException("S3 requires backgroundSessions > 0");
-                }
-                if (trials <= 0) {
-                    throw new IllegalArgumentException("S3 requires trials > 0");
-                }
-            }
-            case "S4" -> {
-                if (sessions <= 0) {
-                    throw new IllegalArgumentException("S4 requires sessions > 0");
-                }
-                if (killFractionSweep().isEmpty()) {
-                    throw new IllegalArgumentException("S4 requires a non-empty killFractionSweep");
-                }
-                for (double f : killFractionSweep()) {
-                    if (f <= 0 || f > 1.0) {
-                        throw new IllegalArgumentException("S4 killFraction values must be in (0, 1]");
-                    }
                 }
             }
             default -> throw new IllegalArgumentException("unsupported type: " + type);

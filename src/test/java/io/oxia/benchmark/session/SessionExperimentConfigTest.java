@@ -37,8 +37,6 @@ class SessionExperimentConfigTest {
             strings = {
                 "conf/session-s1-capacity.yaml",
                 "conf/session-s2-churn.yaml",
-                "conf/session-s3-cleanup.yaml",
-                "conf/session-s4-storm.yaml",
                 "conf/session-test.yaml"
             })
     void shippedConfigsParseAndValidate(String file) throws Exception {
@@ -46,7 +44,7 @@ class SessionExperimentConfigTest {
         assertThat(experiments.items()).isNotEmpty();
         // load() has already applied defaults and validated; assert the fairness knobs are set.
         for (SessionExperiment e : experiments.items()) {
-            assertThat(e.type()).isIn("S1", "S2", "S3", "S4");
+            assertThat(e.type()).isIn("S1", "S2");
             assertThat(e.sessionTimeout()).isGreaterThan(Duration.ZERO);
             assertThat(e.ephemeralsPerSession()).isGreaterThanOrEqualTo(1);
         }
@@ -55,8 +53,8 @@ class SessionExperimentConfigTest {
     @Test
     void appliesDefaults() {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S3");
-        map.put("backgroundSessions", 10);
+        map.put("type", "S2");
+        map.put("churnRateSweep", List.of(100.0));
         SessionExperiment e = MAPPER.convertValue(map, SessionExperiment.class);
         e.applyDefaults();
         e.validate();
@@ -64,7 +62,6 @@ class SessionExperimentConfigTest {
         assertThat(e.sessionTimeout()).isEqualTo(Duration.ofSeconds(10));
         assertThat(e.ephemeralsPerSession()).isEqualTo(1);
         assertThat(e.keyPrefix()).isEqualTo("bench/sess");
-        assertThat(e.trials()).isEqualTo(100);
         assertThat(e.foregroundReadRatio()).isEqualTo(0.5);
         assertThat(e.departure()).isEqualTo("graceful");
     }
@@ -84,15 +81,11 @@ class SessionExperimentConfigTest {
     }
 
     @Test
-    void rejectsS4KillFractionOutOfRange() {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S4");
-        map.put("sessions", 100);
-        map.put("killFractionSweep", List.of(0.5, 1.5));
-        SessionExperiment e = experiment(map);
+    void rejectsS2WithoutSweep() {
+        SessionExperiment e = experiment(Map.of("type", "S2"));
         assertThatThrownBy(e::validate)
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("(0, 1]");
+                .hasMessageContaining("churnRateSweep");
     }
 
     private static SessionExperiment experiment(Map<String, Object> map) {

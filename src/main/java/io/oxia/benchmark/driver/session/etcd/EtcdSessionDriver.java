@@ -19,18 +19,12 @@ import io.etcd.jetcd.ByteSequence;
 import io.etcd.jetcd.Client;
 import io.etcd.jetcd.KV;
 import io.etcd.jetcd.Lease;
-import io.etcd.jetcd.Watch;
 import io.etcd.jetcd.lease.LeaseKeepAliveResponse;
-import io.etcd.jetcd.options.GetOption;
 import io.etcd.jetcd.options.PutOption;
-import io.etcd.jetcd.options.WatchOption;
 import io.etcd.jetcd.support.CloseableClient;
-import io.etcd.jetcd.watch.WatchEvent;
 import io.grpc.stub.StreamObserver;
-import io.oxia.benchmark.driver.session.PrefixListener;
 import io.oxia.benchmark.driver.session.SessionDriver;
 import io.oxia.benchmark.driver.session.SessionHandle;
-import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -57,7 +51,6 @@ public class EtcdSessionDriver implements SessionDriver {
     private Client client;
     private KV kvClient;
     private Lease leaseClient;
-    private Watch watchClient;
 
     @Override
     public String name() {
@@ -83,7 +76,6 @@ public class EtcdSessionDriver implements SessionDriver {
         client = Client.builder().endpoints(targets).build();
         kvClient = client.getKVClient();
         leaseClient = client.getLeaseClient();
-        watchClient = client.getWatchClient();
     }
 
     @Override
@@ -144,39 +136,7 @@ public class EtcdSessionDriver implements SessionDriver {
     }
 
     @Override
-    public CompletableFuture<Boolean> exists(String key) {
-        GetOption opt = GetOption.builder().withKeysOnly(true).withCountOnly(true).build();
-        return kvClient
-                .get(ByteSequence.from(key, StandardCharsets.UTF_8), opt)
-                .thenApply(r -> r.getCount() > 0);
-    }
-
-    @Override
-    public Closeable watchPrefix(String prefix, PrefixListener listener) {
-        ByteSequence p = ByteSequence.from(prefix, StandardCharsets.UTF_8);
-        // Only deletions are consumed, so ask the server not to stream puts at all.
-        WatchOption opt = WatchOption.builder().isPrefix(true).withNoPut(true).build();
-        Watch.Watcher watcher =
-                watchClient.watch(
-                        p,
-                        opt,
-                        response -> {
-                            long now = System.nanoTime();
-                            for (WatchEvent event : response.getEvents()) {
-                                if (event.getEventType() == WatchEvent.EventType.DELETE) {
-                                    listener.onKeyDeleted(
-                                            event.getKeyValue().getKey().toString(StandardCharsets.UTF_8), now);
-                                }
-                            }
-                        });
-        return watcher::close;
-    }
-
-    @Override
     public void close() throws IOException {
-        if (watchClient != null) {
-            watchClient.close();
-        }
         if (leaseClient != null) {
             leaseClient.close();
         }

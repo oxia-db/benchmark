@@ -35,62 +35,78 @@ class SessionExperimentRunnerTest {
     }
 
     @Test
-    void s3RecordsPerTrialCleanupVisibility() throws Exception {
+    void s1SweepsSessionsAndMeasuresForegroundPerPoint() throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S3");
-        map.put("sessionTimeout", "300ms");
-        map.put("ephemeralsPerSession", 1);
-        map.put("createConcurrency", 8);
+        map.put("type", "S1");
+        map.put("sessionTimeout", "1s");
+        map.put("ephemeralsPerSession", 2);
+        map.put("createConcurrency", 16);
         map.put("warmup", "0s");
-        map.put("backgroundSessions", 5);
-        map.put("trials", 4);
-        map.put("settleTimeout", "2s");
-        map.put("foregroundRate", 0); // idle-only phase
+        map.put("holdDuration", "300ms");
+        map.put("foregroundRate", 500);
+        map.put("foregroundKeyspaceSize", 1000);
+        map.put("foregroundParallelism", 2);
+        map.put("sessionsSweep", List.of(10, 25));
 
         SessionResult r = run(map);
 
-        assertThat(r.type).isEqualTo("S3");
-        assertThat(r.cleanupTrials).hasSize(4); // idle phase only
-        for (SessionResult.CleanupTrial t : r.cleanupTrials) {
-            assertThat(t.load).isEqualTo("idle");
-            assertThat(t.notified).isTrue();
-            assertThat(t.gone).isTrue();
-            // EXCESS is measured beyond (t_hb + timeout); with the mock expiring exactly at the deadline
-            // it should be a small non-negative latency, never a large or wildly negative value.
-            assertThat(t.excessMs).isBetween(-50.0, 1500.0);
+        assertThat(r.type).isEqualTo("S1");
+        // Baseline (N=0) plus one point per sweep entry.
+        assertThat(r.capacity).hasSize(3);
+        assertThat(r.capacity.get(0).sessions).isZero();
+        assertThat(r.capacity.get(1).sessions).isEqualTo(10);
+        assertThat(r.capacity.get(2).sessions).isEqualTo(25);
+        for (SessionResult.CapacityPoint p : r.capacity) {
+            assertThat(p.foregroundThroughput).isGreaterThan(0);
         }
     }
 
     @Test
-    void s4ProducesCleanupCurvePerKillFraction() throws Exception {
+    void s2SustainsChurnAndRecordsEstablishLatency() throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", "S4");
-        map.put("sessionTimeout", "300ms");
+        map.put("type", "S2");
+        map.put("sessionTimeout", "1s");
         map.put("ephemeralsPerSession", 1);
-        map.put("createConcurrency", 8);
+        map.put("createConcurrency", 32);
         map.put("warmup", "0s");
-        map.put("sessions", 20);
-        map.put("killFractionSweep", List.of(0.5, 1.0));
-        map.put("sampleKeys", 10);
-        map.put("sampleIntervalMs", 50);
-        map.put("settleTimeout", "2s");
+        map.put("holdDuration", "500ms");
+        map.put("departure", "graceful");
         map.put("foregroundRate", 0);
+        map.put("churnRateSweep", List.of(100.0));
 
         SessionResult r = run(map);
 
-        assertThat(r.storm).hasSize(2);
-        SessionResult.StormRun half = r.storm.get(0);
-        assertThat(half.killFraction).isEqualTo(0.5);
-        assertThat(half.killed).isEqualTo(10);
-        assertThat(half.timeline).isNotEmpty();
-        assertThat(half.completionMs).isNotNaN().isPositive();
+        assertThat(r.type).isEqualTo("S2");
+        assertThat(r.departure).isEqualTo("graceful");
+        assertThat(r.churn).hasSize(1);
+        SessionResult.ChurnPoint p = r.churn.get(0);
+        assertThat(p.targetRate).isEqualTo(100.0);
+        assertThat(p.established).isGreaterThan(0);
+        assertThat(p.achievedCreateRate).isGreaterThan(0);
+        // Mock ops complete inline, so a 100/s target is trivially sustained.
+        assertThat(p.sustained).isTrue();
+        assertThat(p.establishFailed).isZero();
+    }
 
-        SessionResult.StormRun full = r.storm.get(1);
-        assertThat(full.killFraction).isEqualTo(1.0);
-        assertThat(full.killed).isEqualTo(20);
-        assertThat(full.completionMs).isNotNaN().isPositive();
-        // The final sample of a completed run confirms (near) full deletion.
-        assertThat(full.timeline.get(full.timeline.size() - 1).fractionDeleted).isGreaterThan(0.9);
+    @Test
+    void s2AbandonLeavesKeysToExpireServerSide() throws Exception {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("type", "S2");
+        map.put("sessionTimeout", "200ms");
+        map.put("ephemeralsPerSession", 1);
+        map.put("createConcurrency", 32);
+        map.put("warmup", "0s");
+        map.put("holdDuration", "300ms");
+        map.put("departure", "abandon");
+        map.put("foregroundRate", 0);
+        map.put("churnRateSweep", List.of(50.0));
+
+        SessionResult r = run(map);
+
+        assertThat(r.churn.get(0).achievedDepartRate).isGreaterThan(0);
+        // Abandoned sessions' keys expire via the mock's timeout path; give it time to drain.
+        Thread.sleep(500);
+        assertThat(driver.presentCount()).isZero();
     }
 
     private SessionResult run(Map<String, Object> map) throws Exception {

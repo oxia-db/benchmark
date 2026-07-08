@@ -15,10 +15,8 @@
  */
 package io.oxia.benchmark.session;
 
-import io.oxia.benchmark.driver.session.PrefixListener;
 import io.oxia.benchmark.driver.session.SessionDriver;
 import io.oxia.benchmark.driver.session.SessionHandle;
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -31,9 +29,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * An in-memory {@link SessionDriver} that emulates real session semantics well enough to test the
- * pool and the S1–S4 runner deterministically: ephemeral keys become visible on put, a graceful
+ * pool and the S1/S2 runner deterministically: ephemeral keys become visible on put, a graceful
  * close removes them at once, and an abrupt kill schedules their removal after the session timeout
- * — the server-side expiry path. Watchers fire on removal. No real cluster needed.
+ * — the server-side expiry path. No real cluster needed.
  */
 class MockSessionDriver implements SessionDriver {
 
@@ -49,7 +47,6 @@ class MockSessionDriver implements SessionDriver {
     private final java.util.Set<String> present = ConcurrentHashMap.newKeySet();
     private final Map<Long, List<String>> sessionKeys = new ConcurrentHashMap<>();
     private final Map<Long, Duration> timeouts = new ConcurrentHashMap<>();
-    private final CopyOnWriteArrayList<Watch> watches = new CopyOnWriteArrayList<>();
 
     @Override
     public String name() {
@@ -99,18 +96,6 @@ class MockSessionDriver implements SessionDriver {
     }
 
     @Override
-    public CompletableFuture<Boolean> exists(String key) {
-        return CompletableFuture.completedFuture(present.contains(key));
-    }
-
-    @Override
-    public Closeable watchPrefix(String prefix, PrefixListener listener) {
-        Watch w = new Watch(prefix, listener);
-        watches.add(w);
-        return () -> watches.remove(w);
-    }
-
-    @Override
     public void close() {
         sched.shutdownNow();
     }
@@ -120,22 +105,12 @@ class MockSessionDriver implements SessionDriver {
         if (keys == null) {
             return;
         }
-        long now = System.nanoTime();
-        for (String key : keys) {
-            present.remove(key);
-            for (Watch w : watches) {
-                if (key.startsWith(w.prefix)) {
-                    w.listener.onKeyDeleted(key, now);
-                }
-            }
-        }
+        keys.forEach(present::remove);
     }
 
     int presentCount() {
         return present.size();
     }
-
-    private record Watch(String prefix, PrefixListener listener) {}
 
     private record MockHandle(long logicalId) implements SessionHandle {}
 }

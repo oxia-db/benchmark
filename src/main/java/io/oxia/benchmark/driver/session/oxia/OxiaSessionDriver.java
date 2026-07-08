@@ -15,21 +15,16 @@
  */
 package io.oxia.benchmark.driver.session.oxia;
 
-import io.oxia.benchmark.driver.session.PrefixListener;
 import io.oxia.benchmark.driver.session.SessionDriver;
 import io.oxia.benchmark.driver.session.SessionHandle;
 import io.oxia.client.api.AsyncOxiaClient;
-import io.oxia.client.api.Notification;
 import io.oxia.client.api.OxiaClientBuilder;
 import io.oxia.client.api.options.PutOption;
-import java.io.Closeable;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.CustomLog;
 
 /**
@@ -46,9 +41,6 @@ import lombok.CustomLog;
  *   <li><b>Abrupt kill</b> — {@link OxiaSessionInternals#kill} cancels the KeepAlive task and shuts
  *       down the gRPC channel <em>without</em> {@code close()}, so no CloseSession is sent and the
  *       server reaps the session only via heartbeat-timeout expiry.
- *   <li><b>Watch</b> — Oxia notifications are a per-client global feed, so the shared client
- *       streams them and we filter by prefix client-side (Oxia has no server-side prefix scoping
- *       for notifications — a disclosed difference from etcd's native prefix watch).
  * </ul>
  */
 @CustomLog
@@ -58,9 +50,7 @@ public class OxiaSessionDriver implements SessionDriver {
     private String namespace;
     private int batchMaxCount;
 
-    private AsyncOxiaClient client; // foreground load + exists() probes + notification feed
-    private final AtomicBoolean notificationsStarted = new AtomicBoolean();
-    private final CopyOnWriteArrayList<PrefixWatch> watches = new CopyOnWriteArrayList<>();
+    private AsyncOxiaClient client; // foreground load
 
     @Override
     public String name() {
@@ -136,35 +126,6 @@ public class OxiaSessionDriver implements SessionDriver {
     }
 
     @Override
-    public CompletableFuture<Boolean> exists(String key) {
-        // Oxia's get() resolves to null when the key is absent (no exception).
-        return client.get(key).thenApply(r -> r != null);
-    }
-
-    @Override
-    public Closeable watchPrefix(String prefix, PrefixListener listener) {
-        // Start the global notification stream once, on first use.
-        if (notificationsStarted.compareAndSet(false, true)) {
-            client.notifications(this::dispatch);
-        }
-        PrefixWatch w = new PrefixWatch(prefix, listener);
-        watches.add(w);
-        return () -> watches.remove(w);
-    }
-
-    private void dispatch(Notification n) {
-        if (!(n instanceof Notification.KeyDeleted) || watches.isEmpty()) {
-            return;
-        }
-        long now = System.nanoTime();
-        for (PrefixWatch w : watches) {
-            if (n.key().startsWith(w.prefix)) {
-                w.listener.onKeyDeleted(n.key(), now);
-            }
-        }
-    }
-
-    @Override
     public void close() throws IOException {
         try {
             if (client != null) {
@@ -174,8 +135,6 @@ public class OxiaSessionDriver implements SessionDriver {
             throw new IOException(e);
         }
     }
-
-    private record PrefixWatch(String prefix, PrefixListener listener) {}
 
     /** Oxia session state: its dedicated client. */
     private record OxiaSessionHandle(long logicalId, AsyncOxiaClient client)

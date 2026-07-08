@@ -32,8 +32,7 @@ import lombok.CustomLog;
  * lifecycle (establish → live+heartbeating → close/kill) is driven by the backend's own async ops;
  * the pool tracks live handles and fans work out with bounded concurrency via {@link AsyncBatch}.
  * "Establish" is create-session + attach {@code k} ephemeral keys — the unit whose latency S2
- * measures. Keys derive from the session id via {@link SessionKeys}, so a killed session's keys are
- * reconstructable without its handle (needed by S3/S4).
+ * measures. Keys derive deterministically from the session id via {@link SessionKeys}.
  */
 @CustomLog
 public class SessionPool {
@@ -138,15 +137,6 @@ public class SessionPool {
                             + establishFailures.sum()
                             + ")");
         }
-    }
-
-    /** Abruptly kill a specific set of live sessions with bounded concurrency (the S4 storm). */
-    public void killIds(List<Long> ids, int concurrency) {
-        AsyncBatch.run(
-                ids,
-                concurrency,
-                this::kill,
-                (id, ex) -> log.debug().attr("id", id).exception(ex).log("Session kill failed"));
     }
 
     /** Gracefully close everything still live (teardown between sweep points). */

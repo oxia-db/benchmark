@@ -15,27 +15,21 @@
  */
 package io.oxia.benchmark.driver.session.zookeeper;
 
-import io.oxia.benchmark.driver.session.PrefixListener;
 import io.oxia.benchmark.driver.session.SessionDriver;
 import io.oxia.benchmark.driver.session.SessionHandle;
-import java.io.Closeable;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.time.Duration;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.CustomLog;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
-import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
@@ -55,11 +49,6 @@ import org.apache.zookeeper.ZooKeeper;
  *       SendThread and closes the socket <em>without</em> the close-session request, so the server
  *       only reaps the session via the expiry path. Calling {@code close()} would instead end the
  *       session gracefully and skip that path, which is exactly what we must avoid.
- *   <li><b>Watch</b> — classic child watches with re-registration: a one-shot {@code getChildren}
- *       watch on the parent znode, re-armed on every fire, diffing the child set to surface
- *       deletions. ZK's notification says only "children changed", so identifying <em>which</em>
- *       key was removed costs the extra re-read — a disclosed, native property reflected in the
- *       measured latency.
  * </ul>
  */
 @CustomLog
@@ -69,7 +58,7 @@ public class ZooKeeperSessionDriver implements SessionDriver {
     private static final String FOREGROUND_ROOT = "/bench-fg";
 
     private String connectString;
-    private ZooKeeper observer; // foreground load + exists() probes + prefix watches
+    private ZooKeeper observer; // foreground load
     private ExecutorService
             blockingIo; // ZK connect/close/disconnect block; keep them off pool threads
 
@@ -297,85 +286,6 @@ public class ZooKeeperSessionDriver implements SessionDriver {
                     }
                 },
                 blockingIo);
-    }
-
-    @Override
-    public CompletableFuture<Boolean> exists(String key) {
-        CompletableFuture<Boolean> f = new CompletableFuture<>();
-        String path = "/" + key;
-        observer.exists(
-                path,
-                false,
-                (rc, p, ctx, stat) -> {
-                    if (rc == KeeperException.Code.OK.intValue()) {
-                        f.complete(true);
-                    } else if (rc == KeeperException.Code.NONODE.intValue()) {
-                        f.complete(false);
-                    } else {
-                        f.completeExceptionally(KeeperException.create(KeeperException.Code.get(rc), path));
-                    }
-                },
-                null);
-        return f;
-    }
-
-    @Override
-    public Closeable watchPrefix(String prefix, PrefixListener listener) {
-        // The prefix is interpreted as the parent znode whose ephemeral children we observe.
-        String parent =
-                "/" + (prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix);
-        ChildWatch watch = new ChildWatch(parent, listener);
-        watch.arm();
-        return watch;
-    }
-
-    /** Re-registering child watcher: diffs the child set on each fire to emit deletion events. */
-    private final class ChildWatch implements Watcher, Closeable {
-        private final String parent;
-        private final PrefixListener listener;
-        private final AtomicBoolean active = new AtomicBoolean(true);
-        private volatile Set<String> known = new HashSet<>();
-
-        ChildWatch(String parent, PrefixListener listener) {
-            this.parent = parent;
-            this.listener = listener;
-        }
-
-        void arm() {
-            if (!active.get()) {
-                return;
-            }
-            observer.getChildren(
-                    parent,
-                    this,
-                    (rc, p, ctx, children, stat) -> {
-                        long now = System.nanoTime();
-                        if (rc != KeeperException.Code.OK.intValue()) {
-                            return; // parent gone or transient error: stop quietly
-                        }
-                        Set<String> current = new HashSet<>(children);
-                        for (String c : known) {
-                            if (!current.contains(c)) {
-                                // Strip the leading '/' so keys read back the same across systems.
-                                listener.onKeyDeleted((parent + "/" + c).substring(1), now);
-                            }
-                        }
-                        known = current;
-                    },
-                    null);
-        }
-
-        @Override
-        public void process(WatchedEvent event) {
-            if (event.getType() == Watcher.Event.EventType.NodeChildrenChanged) {
-                arm(); // re-register and re-read to discover what changed
-            }
-        }
-
-        @Override
-        public void close() {
-            active.set(false);
-        }
     }
 
     @Override

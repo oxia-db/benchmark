@@ -18,11 +18,8 @@ package io.oxia.benchmark.session;
 /**
  * Deterministic key namespace for session ephemerals, shared by every backend so the same key
  * strings are used everywhere. Each session {@code id} owns a parent {@code <root>/<id>} holding
- * its ephemeral leaves {@code <root>/<id>/e<j>}. The parent groups a session's keys so a watch
- * scoped to it sees exactly that session's ephemerals (what ZooKeeper's child watch needs; a plain
- * key prefix for Oxia/etcd — the zero-padded fixed-width id keeps prefixes non-overlapping). Keys
- * derive from the id alone, so the kill experiments can reconstruct a departed session's keys
- * without its handle.
+ * its ephemeral leaves {@code <root>/<id>/e<j>} — a natural znode hierarchy for ZooKeeper and a
+ * plain key prefix for Oxia/etcd (the zero-padded fixed-width id keeps prefixes non-overlapping).
  */
 public final class SessionKeys {
 

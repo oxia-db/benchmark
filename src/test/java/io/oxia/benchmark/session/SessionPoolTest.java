@@ -50,7 +50,9 @@ class SessionPoolTest {
         pool.rampTo(10, 8);
         assertThat(driver.presentCount()).isEqualTo(10);
 
-        pool.killIds(pool.liveIds().subList(0, 4), 8);
+        for (long id : pool.liveIds().subList(0, 4)) {
+            pool.kill(id).join();
+        }
 
         // Killed sessions leave the pool immediately, but their keys survive until expiry.
         assertThat(pool.size()).isEqualTo(6);

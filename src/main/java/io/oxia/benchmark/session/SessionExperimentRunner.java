@@ -19,35 +19,25 @@ import io.oxia.benchmark.driver.session.SessionDriver;
 import io.oxia.benchmark.runner.UniformRateLimiter;
 import io.oxia.benchmark.session.SessionResult.CapacityPoint;
 import io.oxia.benchmark.session.SessionResult.ChurnPoint;
-import io.oxia.benchmark.session.SessionResult.CleanupTrial;
-import io.oxia.benchmark.session.SessionResult.StormRun;
-import io.oxia.benchmark.session.SessionResult.StormSample;
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
 import lombok.CustomLog;
 import org.HdrHistogram.DoubleHistogram;
 import org.HdrHistogram.DoubleRecorder;
 
 /**
- * Runs one {@link SessionExperiment} (S1–S4) against a {@link SessionDriver} and returns a {@link
- * SessionResult}. The orchestration runs synchronously on this one thread and drives thousands of
- * sessions through the async {@link SessionPool}; the sessions themselves are never thread-backed.
- * Every experiment uses the identical session timeout and ephemeral count from the config, so
- * results are comparable across backends.
+ * Runs one {@link SessionExperiment} (S1 capacity, S2 churn) against a {@link SessionDriver} and
+ * returns a {@link SessionResult}. The orchestration runs synchronously on this one thread and
+ * drives thousands of sessions through the async {@link SessionPool}; the sessions themselves are
+ * never thread-backed. Every experiment uses the identical session timeout and ephemeral count from
+ * the config, so results are comparable across backends.
  */
 @CustomLog
 public class SessionExperimentRunner {
-
-    /** Cadence of the S3 first-absent-read probe (t_gone). */
-    private static final long GONE_POLL_MS = 25;
 
     private final SessionExperiment exp;
     private final SessionDriver driver;
@@ -81,8 +71,6 @@ public class SessionExperimentRunner {
         switch (exp.type()) {
             case "S1" -> runCapacity(r);
             case "S2" -> runChurn(r);
-            case "S3" -> runCleanup(r);
-            case "S4" -> runStorm(r);
             default -> throw new IllegalArgumentException("unknown experiment type: " + exp.type());
         }
         return r;
@@ -264,193 +252,10 @@ public class SessionExperimentRunner {
         return p;
     }
 
-    // ---- S3 cleanup-visibility ------------------------------------------------------------------
-
-    private void runCleanup(SessionResult r) {
-        r.cleanupTrials = new ArrayList<>();
-        SessionPool pool = newPool();
-        pool.rampTo(exp.backgroundSessions(), concurrency);
-        log.info().attr("background", pool.size()).log("S3 background pool live; running idle trials");
-        runCleanupPhase(r, pool, "idle");
-
-        ForegroundLoad fg = newForeground();
-        if (fg.active()) {
-            fg.start();
-            sleep(exp.warmup());
-            log.info().log("S3 running trials under foreground load");
-            runCleanupPhase(r, pool, "load");
-            fg.stop();
-        }
-        pool.closeAll(concurrency);
-    }
-
-    private void runCleanupPhase(SessionResult r, SessionPool pool, String load) {
-        long budgetNanos = timeout.toNanos() + exp.settleTimeout().toNanos();
-        for (int trial = 0; trial < exp.trials(); trial++) {
-            long id = pool.nextId();
-            pool.establish(id).join(); // target session live with k ephemerals
-
-            // Arm the native change feed on the target's parent, capturing the first deletion time.
-            CompletableFuture<Long> notify = new CompletableFuture<>();
-            Closeable watch =
-                    driver.watchPrefix(keys.parent(id), (key, atNanos) -> notify.complete(atNanos));
-            sleepMs(200); // let the watch arm and heartbeats settle
-
-            String probeKey = keys.ephemeral(id, 0);
-            long tHb = System.nanoTime(); // last heartbeat instant (upper bound; see README)
-            pool.kill(id).join(); // abrupt: heartbeats stop now, no goodbye
-
-            long deadline = tHb + budgetNanos;
-            Long tGone = pollGone(probeKey, deadline);
-            Long tNotify = await(notify, deadline);
-            closeQuietly(watch);
-
-            long contractDeadline = tHb + timeout.toNanos();
-            CleanupTrial ct = new CleanupTrial();
-            ct.trial = trial;
-            ct.load = load;
-            if (tNotify != null) {
-                ct.notified = true;
-                ct.excessMs = (tNotify - contractDeadline) / 1_000_000.0;
-            }
-            if (tGone != null) {
-                ct.gone = true;
-                ct.goneExcessMs = (tGone - contractDeadline) / 1_000_000.0;
-            }
-            if (tNotify != null && tGone != null) {
-                ct.dispatchMs = (tNotify - tGone) / 1_000_000.0;
-            }
-            r.cleanupTrials.add(ct);
-            if ((trial + 1) % 25 == 0) {
-                log.info()
-                        .attr("load", load)
-                        .attr("trial", trial + 1)
-                        .attr("excessMs", String.format("%.1f", ct.excessMs))
-                        .log("S3 trials progressing");
-            }
-        }
-    }
-
-    /**
-     * Poll a key until a read returns absent or the deadline passes; null if it never went absent.
-     */
-    private Long pollGone(String key, long deadlineNanos) {
-        while (System.nanoTime() < deadlineNanos) {
-            try {
-                if (!driver.exists(key).join()) {
-                    return System.nanoTime();
-                }
-            } catch (Exception e) {
-                // transient read failure: keep polling until the deadline
-            }
-            sleepMs(GONE_POLL_MS);
-        }
-        return null;
-    }
-
-    // ---- S4 expiry storm ------------------------------------------------------------------------
-
-    private void runStorm(SessionResult r) {
-        r.storm = new ArrayList<>();
-        long n = exp.sessions();
-        SessionPool pool = newPool();
-        ForegroundLoad fg = newForeground();
-        fg.start();
-        sleep(exp.warmup());
-
-        for (double fraction : exp.killFractionSweep()) {
-            pool.rampTo(n, concurrency); // refill after the previous fraction's kills
-            sleep(exp.warmup());
-
-            List<Long> liveIds = pool.liveIds();
-            int killCount = (int) Math.min(liveIds.size(), Math.round(fraction * n));
-            List<Long> killIds = new ArrayList<>(liveIds.subList(0, killCount));
-            List<String> sampled = sampleProbeKeys(killIds, exp.sampleKeys());
-
-            StormRun sr = new StormRun();
-            sr.killFraction = fraction;
-            sr.killed = killIds.size();
-            sr.sampledKeys = sampled.size();
-            sr.completionMs = Double.NaN;
-
-            fg.snapshotInterval(); // reset just before the storm
-            long t0 = System.nanoTime();
-            CompletableFuture<Void> killDone =
-                    CompletableFuture.runAsync(() -> pool.killIds(killIds, concurrency));
-            log.info()
-                    .attr("killFraction", fraction)
-                    .attr("killed", killIds.size())
-                    .log("S4 simultaneous kill issued; sampling cleanup curve");
-
-            long deadline = t0 + timeout.toNanos() + exp.settleTimeout().toNanos();
-            while (System.nanoTime() < deadline) {
-                sleepMs(exp.sampleIntervalMs());
-                double fractionDeleted = countAbsent(sampled) / (double) Math.max(1, sampled.size());
-                ForegroundLoad.IntervalStats s = fg.snapshotInterval();
-                StormSample ss = new StormSample();
-                ss.tMs = (System.nanoTime() - t0) / 1_000_000.0;
-                ss.fractionDeleted = fractionDeleted;
-                ss.foregroundThroughput = s.throughput();
-                ss.foregroundP99 = s.p99();
-                sr.timeline.add(ss);
-                if (fractionDeleted >= 0.999) {
-                    sr.completionMs = ss.tMs;
-                    break;
-                }
-            }
-            killDone.join();
-            r.storm.add(sr);
-            log.info()
-                    .attr("killFraction", fraction)
-                    .attr("completionMs", String.format("%.0f", sr.completionMs))
-                    .log("S4 fraction complete");
-        }
-        fg.stop();
-        pool.closeAll(concurrency);
-    }
-
-    /** Count how many of the sampled keys currently read as absent (bounded-concurrency probe). */
-    private int countAbsent(List<String> sampled) {
-        AtomicInteger absent = new AtomicInteger();
-        AsyncBatch.run(
-                sampled,
-                concurrency,
-                key ->
-                        driver
-                                .exists(key)
-                                .thenAccept(
-                                        present -> {
-                                            if (!present) {
-                                                absent.incrementAndGet();
-                                            }
-                                        }),
-                (key, ex) -> {});
-        return absent.get();
-    }
-
-    /** Representative probe key (e0) for up to {@code max} of the killed sessions, evenly strided. */
-    private List<String> sampleProbeKeys(List<Long> killIds, int max) {
-        List<String> out = new ArrayList<>(Math.min(max, killIds.size()));
-        if (killIds.size() <= max) {
-            for (long id : killIds) {
-                out.add(keys.ephemeral(id, 0));
-            }
-        } else {
-            double stride = killIds.size() / (double) max;
-            for (int i = 0; i < max; i++) {
-                out.add(keys.ephemeral(killIds.get((int) (i * stride)), 0));
-            }
-        }
-        return out;
-    }
-
     // ---- small helpers --------------------------------------------------------------------------
 
     private static void sleep(Duration d) {
-        sleepMs(d.toMillis());
-    }
-
-    private static void sleepMs(long ms) {
+        long ms = d.toMillis();
         if (ms <= 0) {
             return;
         }
@@ -458,24 +263,6 @@ public class SessionExperimentRunner {
             Thread.sleep(ms);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        }
-    }
-
-    /** Await a future's value up to the deadline, returning null on timeout/failure. */
-    private static Long await(CompletableFuture<Long> f, long deadlineNanos) {
-        long remainingMs = Math.max(0, (deadlineNanos - System.nanoTime()) / 1_000_000) + 100;
-        try {
-            return f.get(remainingMs, TimeUnit.MILLISECONDS);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static void closeQuietly(Closeable c) {
-        try {
-            c.close();
-        } catch (Exception ignored) {
-            // best-effort watch teardown
         }
     }
 }

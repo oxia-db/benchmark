@@ -19,9 +19,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oxia.benchmark.session.SessionResult;
 import io.oxia.benchmark.session.SessionResult.CapacityPoint;
 import io.oxia.benchmark.session.SessionResult.ChurnPoint;
-import io.oxia.benchmark.session.SessionResult.CleanupTrial;
-import io.oxia.benchmark.session.SessionResult.StormRun;
-import io.oxia.benchmark.session.SessionResult.StormSample;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,9 +34,9 @@ import picocli.CommandLine.Option;
 /**
  * Aggregates the per-worker session-experiment result files (one JSONL line each, {@link
  * SessionResult}) into chart-ready CSV plus a raw JSON dump — the session-suite analogue of {@code
- * ReportCommand}. Each experiment type flattens to its own CSV: time series for S1/S2/S4 and one
- * row per trial for S3 (so a CDF plots directly). Rows keep {@code instanceId}, so cluster-level
- * roll-ups (e.g. summing foreground throughput across workers) are a groupby away in the analysis.
+ * ReportCommand}. Each experiment type flattens to its own CSV (S1 capacity sweep, S2 churn sweep).
+ * Rows keep {@code instanceId}, so cluster-level roll-ups (e.g. summing foreground throughput
+ * across workers) are a groupby away in the analysis.
  */
 @CustomLog
 @Command(
@@ -72,8 +69,6 @@ public class SessionReportCommand implements Callable<Integer> {
 
         writeCapacity(all.stream().filter(r -> "S1".equals(r.type)).toList());
         writeChurn(all.stream().filter(r -> "S2".equals(r.type)).toList());
-        writeCleanup(all.stream().filter(r -> "S3".equals(r.type)).toList());
-        writeStorm(all.stream().filter(r -> "S4".equals(r.type)).toList());
 
         JSON.writerWithDefaultPrettyPrinter()
                 .writeValue(outDir.resolve("session-summary.json").toFile(), all);
@@ -170,75 +165,6 @@ public class SessionReportCommand implements Callable<Integer> {
             }
         }
         write("session-s2.csv", sb.toString());
-    }
-
-    // ---- S3 cleanup-visibility (one row per trial → CDF) ----------------------------------------
-
-    private void writeCleanup(List<SessionResult> results) throws IOException {
-        if (results.isEmpty()) {
-            return;
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append(
-                "index,name,driver,instanceId,session_timeout_ms,ephemerals_per_session,load,trial,"
-                        + "notified,gone,excess_ms,gone_excess_ms,dispatch_ms\n");
-        for (SessionResult r : results) {
-            for (CleanupTrial t : nn(r.cleanupTrials)) {
-                sb.append(
-                        String.format(
-                                Locale.ROOT,
-                                "%d,%s,%s,%s,%.0f,%d,%s,%d,%b,%b,%.3f,%.3f,%.3f%n",
-                                r.index,
-                                csv(r.name),
-                                r.driver,
-                                csv(r.instanceId),
-                                r.sessionTimeoutMs,
-                                r.ephemeralsPerSession,
-                                t.load,
-                                t.trial,
-                                t.notified,
-                                t.gone,
-                                t.excessMs,
-                                t.goneExcessMs,
-                                t.dispatchMs));
-            }
-        }
-        write("session-s3.csv", sb.toString());
-    }
-
-    // ---- S4 expiry storm (time series) ----------------------------------------------------------
-
-    private void writeStorm(List<SessionResult> results) throws IOException {
-        if (results.isEmpty()) {
-            return;
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append(
-                "index,name,driver,instanceId,kill_fraction,killed,sampled_keys,completion_ms,"
-                        + "t_ms,fraction_deleted,fg_throughput,fg_p99_ms\n");
-        for (SessionResult r : results) {
-            for (StormRun run : nn(r.storm)) {
-                for (StormSample s : nn(run.timeline)) {
-                    sb.append(
-                            String.format(
-                                    Locale.ROOT,
-                                    "%d,%s,%s,%s,%.2f,%d,%d,%.0f,%.1f,%.4f,%.1f,%.3f%n",
-                                    r.index,
-                                    csv(r.name),
-                                    r.driver,
-                                    csv(r.instanceId),
-                                    run.killFraction,
-                                    run.killed,
-                                    run.sampledKeys,
-                                    run.completionMs,
-                                    s.tMs,
-                                    s.fractionDeleted,
-                                    s.foregroundThroughput,
-                                    s.foregroundP99));
-                }
-            }
-        }
-        write("session-s4.csv", sb.toString());
     }
 
     // ---- helpers --------------------------------------------------------------------------------

@@ -16,14 +16,14 @@
 package io.oxia.benchmark.driver.session;
 
 import io.oxia.benchmark.driver.KVStoreDriver;
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * A {@link KVStoreDriver} that additionally exposes the session / ephemeral primitives the four
- * session experiments (S1–S4) drive. The inherited {@link #put}/{@link #get} run the foreground
- * (non-session) load; the methods here manage sessions and their attached ephemeral keys.
+ * A {@link KVStoreDriver} that additionally exposes the session / ephemeral primitives the session
+ * experiments (S1 capacity, S2 churn) drive. The inherited {@link #put}/{@link #get} run the
+ * foreground (non-session) load; the methods here manage sessions and their attached ephemeral
+ * keys.
  *
  * <p><b>Fairness contract.</b> Every method takes the same session timeout across systems and each
  * backend heartbeats at {@code timeout/3} (Oxia's SDK KeepAlive, ZooKeeper's SendThread ping,
@@ -72,15 +72,4 @@ public interface SessionDriver extends KVStoreDriver {
      * stream without revoking the lease.
      */
     CompletableFuture<Void> killSession(SessionHandle session);
-
-    /**
-     * Read a key: {@code true} if present, {@code false} if absent. Used to observe cleanup (t_gone).
-     */
-    CompletableFuture<Boolean> exists(String key);
-
-    /**
-     * Subscribe to the native change feed for a key prefix (Oxia notifications, ZK child watches with
-     * re-registration, etcd prefix watch). The returned {@link Closeable} cancels the subscription.
-     */
-    Closeable watchPrefix(String prefix, PrefixListener listener);
 }
