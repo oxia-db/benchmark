@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.oxia.benchmark.driver.session.oxia;
+package io.oxia.benchmark.driver.oxia;
 
 import io.oxia.client.api.AsyncOxiaClient;
 import java.lang.reflect.Field;
