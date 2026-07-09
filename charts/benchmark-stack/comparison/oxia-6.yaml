@@ -13,8 +13,13 @@ oxia-cluster:
   server:
     replicas: 6
     cpu: "3"
-    memory: 4Gi
+    memory: 6Gi
     storage: 2Gi
+    # Use the 6Gi allocation: raise the pebble read cache from 512MB to 3GB (see oxia-3.yaml).
+    config:
+      storage:
+        database:
+          readCacheSizeMB: 3072
   pprofEnabled: false
   monitoringEnabled: false
 
