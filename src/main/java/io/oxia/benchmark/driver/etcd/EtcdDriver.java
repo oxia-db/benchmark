@@ -32,6 +32,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import lombok.CustomLog;
 
 /**
@@ -53,6 +55,7 @@ public class EtcdDriver implements SessionDriver {
     private Client client;
     private KV kvClient;
     private Lease leaseClient;
+    private ExecutorService callbackExecutor;
 
     @Override
     public String name() {
@@ -85,7 +88,13 @@ public class EtcdDriver implements SessionDriver {
         // io.etcd.jetcd, and the shaded jar may load that ClientBuilder (which lacks
         // connectTimeout). Using only jetcd's stable core builder API keeps the etcd driver robust
         // to whichever copy wins. (dialTimeout config is currently ignored as a result.)
-        client = Client.builder().endpoints(targets).build();
+        // jetcd defaults to an unbounded cached thread pool for its async callbacks; under a
+        // max-throughput run (thousands of in-flight requests) that grows to thousands of threads
+        // and OOMs the worker. Pin it to a bounded pool. executorService() is part of jetcd's
+        // stable core builder API (unlike connectTimeout above), so it is safe against the shaded-
+        // jetcd ambiguity noted here.
+        callbackExecutor = Executors.newFixedThreadPool(64);
+        client = Client.builder().endpoints(targets).executorService(callbackExecutor).build();
         kvClient = client.getKVClient();
         leaseClient = client.getLeaseClient();
     }
@@ -157,6 +166,9 @@ public class EtcdDriver implements SessionDriver {
         }
         if (client != null) {
             client.close();
+        }
+        if (callbackExecutor != null) {
+            callbackExecutor.shutdownNow();
         }
     }
 
