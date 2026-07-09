@@ -1,0 +1,53 @@
+# Session churn: how fast can sessions come and go before establish latency knees?
+#
+# A steady rate r sessions/s are established (create + write k ephemerals) while r depart, sweeping r
+# toward the latency knee. Two departure variants: graceful close (protocol goodbye) vs abandon
+# (server-side expiry cleans up). Report the max sustainable churn and the p99 session-establish
+# latency vs r. "Sustained" means the achieved create rate stayed within 95% of the target; the
+# fell_behind counter marks ticks where in-flight establishes hit the concurrency cap (the knee).
+exitWhenFinish: true
+items:
+  - name: churn graceful k=1
+    description: Churn with graceful close, 1 ephemeral/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 1024
+    warmup: 10s
+    holdDuration: 60s
+    departure: graceful
+    churnRateSweep: [100, 500, 1000, 2000, 5000, 10000, 20000]
+  - name: churn abandon k=1
+    description: Churn with abandon (server-side expiry), 1 ephemeral/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 1024
+    warmup: 10s
+    holdDuration: 60s
+    departure: abandon
+    churnRateSweep: [100, 500, 1000, 2000, 5000, 10000, 20000]
+  - name: churn graceful k=10
+    description: Churn with graceful close, 10 ephemerals/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 10
+    ephemeralValueSize: 16
+    createConcurrency: 1024
+    warmup: 10s
+    holdDuration: 60s
+    departure: graceful
+    churnRateSweep: [100, 500, 1000, 2000, 5000, 10000]
+  - name: churn abandon k=10
+    description: Churn with abandon (server-side expiry), 10 ephemerals/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 10
+    ephemeralValueSize: 16
+    createConcurrency: 1024
+    warmup: 10s
+    holdDuration: 60s
+    departure: abandon
+    churnRateSweep: [100, 500, 1000, 2000, 5000, 10000]

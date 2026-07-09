@@ -1,7 +1,12 @@
-# ZooKeeper (bitnami subchart), single-node, sized for a real cluster (3 CPU / 4Gi). 3 worker pods.
+# ZooKeeper (bitnami subchart), single-node, sized for a real cluster (3 CPU / 6Gi). 3 worker pods.
 zookeeper:
   enabled: true
   replicaCount: 1
+  # ZooKeeper keeps every znode in the JVM heap. bitnami defaults the heap to 1024MB regardless
+  # of the container limit, which the YCSB 1M keyspace overflows (Java OOM -> CrashLoopBackOff).
+  # Raise the heap and give the container headroom above it for non-heap (metaspace, netty
+  # direct buffers) + OS.
+  heapSize: 3072
   persistence:
     enabled: true
     size: 2Gi
@@ -10,10 +15,10 @@ zookeeper:
   resources:
     requests:
       cpu: "3"
-      memory: 4Gi
+      memory: 6Gi
     limits:
       cpu: "3"
-      memory: 4Gi
+      memory: 6Gi
 
 workers:
   - name: zookeeper-worker

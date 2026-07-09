@@ -142,7 +142,7 @@ public class Workload {
                 maxOutstandingRequests);
     }
 
-    static Duration parseDuration(String s) {
+    public static Duration parseDuration(String s) {
         if (s == null || s.isEmpty()) {
             return Duration.ZERO;
         }

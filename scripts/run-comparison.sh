@@ -21,12 +21,14 @@ IMAGE="${IMAGE:-oxia/benchmark:local}"
 IMAGE_PULL_POLICY="${IMAGE_PULL_POLICY:-Never}"
 NODE_POOL="${NODE_POOL:-}"               # if set, pin all pods to this GKE nodepool + tolerate its taints
 WORKER_REPLICAS="${WORKER_REPLICAS:-}"   # if set, override the per-backend worker replica count
+WORKER_CPU="${WORKER_CPU:-}"             # if set, override the per-backend worker CPU request/limit
 STORAGE_CLASS="${STORAGE_CLASS:-}"       # if set, put every backend's data PVCs on this storage class
 OXIA_IMAGE="${OXIA_IMAGE:-}"             # if set (repo:tag), run the oxia backend with this server image
 WORKLOADS="${WORKLOADS:-conf/workload-comparison.yaml}"
 RESULTS="${RESULTS:-comparison-results}"
 OUT="${OUT:-comparison-report}"
 PER_BACKEND_TIMEOUT="${PER_BACKEND_TIMEOUT:-600}"
+CRASH_RESTART_LIMIT="${CRASH_RESTART_LIMIT:-5}"  # bail once any container has crash-looped this many times
 
 if [ "$#" -gt 0 ]; then BACKENDS=("$@"); else BACKENDS=(oxia etcd zookeeper redis consul tikv); fi
 
@@ -115,11 +117,25 @@ for backend in "${BACKENDS[@]}"; do
       kc logs "$p" -c "$worker" 2>/dev/null | grep -q "All workloads finished" && fin=$((fin + 1))
     done
     [ "$n" -ge "$expected" ] && [ "$fin" -ge "$n" ] && { finished=1; break; }
-    # fail fast on unrecoverable pod states (bad image, crash loop) instead of waiting the full timeout
+    # fail fast on unrecoverable image states (wrong/missing image) instead of waiting the full timeout
     bad=$(kc get pods -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.state.waiting.reason}{" "}{end}{range .status.initContainerStatuses[*]}{.state.waiting.reason}{" "}{end}{end}' 2>/dev/null)
-    if echo "$bad" | grep -qE 'ImagePullBackOff|ErrImagePull|CrashLoopBackOff|InvalidImageName'; then
-      echo "!! unrecoverable pod state: $(echo "$bad" | tr ' ' '\n' | grep -vE '^$' | sort -u | tr '\n' ' ')"
+    if echo "$bad" | grep -qE 'ImagePullBackOff|ErrImagePull|InvalidImageName'; then
+      echo "!! unrecoverable image state: $(echo "$bad" | tr ' ' '\n' | grep -vE '^$' | sort -u | tr '\n' ' ')"
       break
+    fi
+    # CrashLoopBackOff can be transient on a spot/autoscaling cluster (node preemption, OOM during
+    # scale-up); only bail once a container has genuinely crash-looped several times.
+    if echo "$bad" | grep -q 'CrashLoopBackOff'; then
+      maxrestart=$(kc get pods -o jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.restartCount}{" "}{end}{end}' 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -rn | head -1)
+      if [ "${maxrestart:-0}" -ge "$CRASH_RESTART_LIMIT" ]; then
+        echo "!! persistent crash loop (restarts=$maxrestart, limit=$CRASH_RESTART_LIMIT), dumping crashing pods before sweep:"
+        for cp in $(kc get pods --no-headers 2>/dev/null | awk '$4+0>=1{print $1}'); do
+          echo "---- $cp ----"
+          kc get pod "$cp" -o jsonpath='{range .status.containerStatuses[*]}{.name}: r={.restartCount} reason={.lastState.terminated.reason} exit={.lastState.terminated.exitCode}{"\n"}{end}' 2>/dev/null
+          kc logs "$cp" --all-containers --previous --tail=18 2>&1 | tail -18
+        done
+        break
+      fi
     fi
     sleep 10
   done

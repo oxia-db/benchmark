@@ -108,7 +108,13 @@ public class ReportCommand implements Callable<Integer> {
     private static List<WorkloadResult> readResults(Path dir) throws IOException {
         List<WorkloadResult> out = new ArrayList<>();
         try (Stream<Path> files = Files.list(dir)) {
-            for (Path p : files.filter(f -> f.toString().endsWith(".jsonl")).toList()) {
+            // Skip *-session.jsonl: those are SessionResult lines from the session experiments, read by
+            // the separate `session-report` command; parsing them here would inject bogus zero-op rows.
+            for (Path p :
+                    files
+                            .filter(f -> f.toString().endsWith(".jsonl"))
+                            .filter(f -> !f.toString().endsWith("-session.jsonl"))
+                            .toList()) {
                 for (String line : Files.readAllLines(p)) {
                     if (!line.isBlank()) {
                         out.add(JSON.readValue(line, WorkloadResult.class));

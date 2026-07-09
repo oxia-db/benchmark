@@ -266,9 +266,10 @@ public class BenchmarkRunner {
 
     /**
      * Pre-build all keys up front ("k-" + a 16-digit zero-padded index) so the hot loop only does an
-     * array read. Allocates one String per key in the keyspace.
+     * array read. Allocates one String per key in the keyspace. Also used by the session suite's
+     * foreground load so both traffic loops share one key scheme.
      */
-    private static String[] buildKeys(long keyspaceSize) {
+    public static String[] buildKeys(long keyspaceSize) {
         String[] keys = new String[(int) keyspaceSize];
         char[] c = new char[18];
         c[0] = 'k';
