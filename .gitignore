@@ -42,8 +42,10 @@ hs_err_pid*
 *.tgz
 
 # Benchmark run output (comparison sweeps use suffixed dirs for chunked runs, e.g.
-# comparison-results-latency; report/ and results/ come from local single-backend runs)
-comparison-results*/
-comparison-report*/
-report/
-results/
+# comparison-results-latency; report/ and results/ come from local single-backend runs).
+# Anchored to the repo root: an unanchored report/ would also ignore the
+# src/main/java/.../report Java package.
+/comparison-results*/
+/comparison-report*/
+/report/
+/results/
