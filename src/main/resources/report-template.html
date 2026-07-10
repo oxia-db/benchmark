@@ -77,7 +77,7 @@ if (tputIndices.length === 0) {
 
 // Per-workload comparison sections.
 const container = document.getElementById('workloads');
-const fmt = (x) => x ? x.toFixed(x < 100 ? 3 : 1) : '0';
+const fmt = (x) => x ? x.toFixed(1) : '0';
 indices.forEach(idx => {
   const rows = byWorkload[idx];
   const w = rows[0];
