@@ -13,15 +13,15 @@ oxia-cluster:
     memory: 128Mi
   server:
     replicas: 3
-    cpu: "3"
-    memory: 6Gi
+    cpu: "2"
+    memory: 4Gi
     storage: 2Gi
-    # Use the 6Gi allocation: raise the pebble read cache from the 512MB default to 3GB, so oxia
+    # Use the 4Gi allocation: raise the pebble read cache from the 512MB default to 2GB, so oxia
     # actually caches data in its footprint (comparable to zk's heap / etcd's page cache).
     config:
       storage:
         database:
-          readCacheSizeMB: 3072
+          readCacheSizeMB: 2048
   pprofEnabled: false
   monitoringEnabled: false
 

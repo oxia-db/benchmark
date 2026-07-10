@@ -1,4 +1,4 @@
-# Oxia, single-node, sized for a real cluster (3 CPU / 4Gi per server node). 3 worker pods (distributed load generator).
+# Oxia, single-node, sized for a real cluster (2 CPU / 4Gi per server node). 3 worker pods (distributed load generator).
 oxia-cluster:
   enabled: true
   # The client dials the k8s Service short name; the server's authority validation
@@ -12,14 +12,14 @@ oxia-cluster:
     memory: 128Mi
   server:
     replicas: 3
-    cpu: "3"
-    memory: 6Gi
+    cpu: "2"
+    memory: 4Gi
     storage: 2Gi
-    # Use the 6Gi allocation: raise the pebble read cache from 512MB to 3GB (see oxia-3.yaml).
+    # Use the 4Gi allocation: raise the pebble read cache from 512MB to 2GB (see oxia-3.yaml).
     config:
       storage:
         database:
-          readCacheSizeMB: 3072
+          readCacheSizeMB: 2048
   pprofEnabled: false
   monitoringEnabled: false
 

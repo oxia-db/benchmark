@@ -1,4 +1,4 @@
-# TiKV: 1 PD + 1 TiKV store (raw PingCAP images), sized for a real cluster (3 CPU / 4Gi). 3 worker pods.
+# TiKV: 1 PD + 1 TiKV store (raw PingCAP images), sized for a real cluster (2 CPU / 4Gi). 3 worker pods.
 # Validated end-to-end on kind/arm64 (store serves, worker completes, results gathered).
 # Caveat: a single-node store is by far the slowest backend here and saturates well below
 # the shared target rate, so its latencies are dominated by queueing; the store also needs
@@ -10,7 +10,7 @@ tikv:
   image: pingcap/tikv:v8.5.1
   # TiKV is memory-hungry (RocksDB block cache + memtables + raft engine); it OOMKills below ~2Gi.
   # It is also CPU-sensitive: at 1 CPU the store responds too slowly and raw RPCs time out.
-  cpu: "3"
+  cpu: "2"
   memory: 4Gi
   pdImage: pingcap/pd:v8.5.1
   pd:

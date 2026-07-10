@@ -1,4 +1,4 @@
-# HashiCorp Consul (KV), single-server, sized for a real cluster (3 CPU / 4Gi). 3 worker pods.
+# HashiCorp Consul (KV), single-server, sized for a real cluster (2 CPU / 4Gi). 3 worker pods.
 consul:
   enabled: true
   server:
@@ -6,10 +6,10 @@ consul:
     storage: 2Gi
     resources:
       requests:
-        cpu: "3"
+        cpu: "2"
         memory: 4Gi
       limits:
-        cpu: "3"
+        cpu: "2"
         memory: 4Gi
   client:
     enabled: false
