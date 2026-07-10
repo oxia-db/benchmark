@@ -16,7 +16,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 10000
+    maxOutstandingRequests: 100000
   - name: YCSB A
     description: Update heavy — 50% reads, 50% updates, zipfian, max throughput
     readRatio: 0.5
@@ -26,7 +26,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 10000
+    maxOutstandingRequests: 100000
   - name: YCSB B
     description: Read mostly — 95% reads, 5% updates, zipfian, max throughput
     readRatio: 0.95
@@ -36,7 +36,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 10000
+    maxOutstandingRequests: 100000
   - name: YCSB C
     description: Read only — 100% reads, zipfian, max throughput
     readRatio: 1.0
@@ -46,7 +46,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 10000
+    maxOutstandingRequests: 100000
   - name: YCSB D
     description: Read latest — 95% reads skewed to newest keys, 5% writes, latest distribution, max throughput
     readRatio: 0.95
@@ -56,4 +56,4 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 10000
+    maxOutstandingRequests: 100000
