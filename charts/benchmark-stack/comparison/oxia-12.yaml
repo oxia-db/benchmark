@@ -14,7 +14,10 @@ oxia-cluster:
     replicas: 12
     cpu: "2"
     memory: 4Gi
-    storage: 2Gi
+    # WAL on its own volume, 10Gi + 10Gi (see oxia-3.yaml).
+    storage: 10Gi
+    wal:
+      storage: 10Gi
     # Use the 4Gi allocation: raise the pebble read cache from 512MB to 2GB (see oxia-3.yaml).
     config:
       storage:

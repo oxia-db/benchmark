@@ -15,7 +15,11 @@ oxia-cluster:
     replicas: 3
     cpu: "2"
     memory: 4Gi
-    storage: 2Gi
+    # WAL on its own volume (oxia-cluster >= 0.0.8), separate from the db — the same wal/data
+    # split as zk's dataLogDir and etcd's ETCD_WAL_DIR, 10Gi each.
+    storage: 10Gi
+    wal:
+      storage: 10Gi
     # Use the 4Gi allocation: raise the pebble read cache from the 512MB default to 2GB, so oxia
     # actually caches data in its footprint (comparable to zk's heap / etcd's page cache).
     config:
