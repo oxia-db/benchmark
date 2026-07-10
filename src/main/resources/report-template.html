@@ -42,7 +42,6 @@ const color = {}; drivers.forEach((dr, i) => color[dr] = PALETTE[i % PALETTE.len
 
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const wlabel = (d) => d.name ? `#${d.index} ${d.name}` : `#${d.index} ${d.keyDistribution} r=${d.readRatio}`;
-const labels = indices.map(i => wlabel(byWorkload[i][0]));
 
 const pctAxis = {
   type: 'logarithmic', min: 1, title: { display: true, text: 'Percentile' },
@@ -50,24 +49,31 @@ const pctAxis = {
     const l = Math.log10(v);
     if (Math.abs(l - Math.round(l)) > 1e-6) return '';
     if (v < 1.5) return '0%';
-    return (100 - 100 / v).toFixed(Math.max(0, Math.round(l) - 1)) + '%';
+    return parseFloat((100 - 100 / v).toFixed(6)) + '%';
   }}
 };
 
-// Top: total throughput per workload, grouped by driver.
-new Chart(document.getElementById('throughput-all'), {
-  type: 'bar',
-  data: { labels, datasets: drivers.map(dr => ({
-    label: dr,
-    backgroundColor: color[dr],
-    data: indices.map(i => {
-      const row = byWorkload[i].find(d => d.driver === dr);
-      return row ? row.write.opsPerSec + row.read.opsPerSec : 0;
-    }),
-  }))},
-  options: { plugins: { title: { display: true, text: 'Throughput by driver (ops/s)' } },
-             responsive: true, scales: { y: { beginAtZero: true } } }
-});
+// Top: total throughput per workload, grouped by driver. Only meaningful for workloads in
+// throughput mode — at a fixed target rate every bar is just the target, so rate-limited
+// workloads are skipped, and the chart is dropped entirely when all of them are.
+const tputIndices = indices.filter(i => !(byWorkload[i][0].targetRate > 0));
+if (tputIndices.length === 0) {
+  document.getElementById('throughput-all').closest('.card').remove();
+} else {
+  new Chart(document.getElementById('throughput-all'), {
+    type: 'bar',
+    data: { labels: tputIndices.map(i => wlabel(byWorkload[i][0])), datasets: drivers.map(dr => ({
+      label: dr,
+      backgroundColor: color[dr],
+      data: tputIndices.map(i => {
+        const row = byWorkload[i].find(d => d.driver === dr);
+        return row ? row.write.opsPerSec + row.read.opsPerSec : 0;
+      }),
+    }))},
+    options: { plugins: { title: { display: true, text: 'Throughput by driver (ops/s)' } },
+               responsive: true, scales: { y: { beginAtZero: true } } }
+  });
+}
 
 // Per-workload comparison sections.
 const container = document.getElementById('workloads');
@@ -98,7 +104,12 @@ indices.forEach(idx => {
     return;
   }
 
-  html += `<canvas id="pct-${idx}"></canvas><div class="wrap"><table>`;
+  const hasWrites = rows.some(r => (r.write.dist || []).length);
+  const hasReads = rows.some(r => (r.read.dist || []).length);
+  html += `<canvas id="pct-${idx}-total"></canvas>`;
+  if (hasWrites) html += `<canvas id="pct-${idx}-write"></canvas>`;
+  if (hasReads) html += `<canvas id="pct-${idx}-read"></canvas>`;
+  html += `<div class="wrap"><table>`;
   html += '<tr><th class="l">driver</th><th>workers</th><th>w ops/s</th><th>w p50</th><th>w p99</th><th>w p99.9</th><th>w max</th><th>r ops/s</th><th>r p50</th><th>r p99</th><th>r p99.9</th><th>r max</th><th>failed</th></tr>';
   rows.forEach(r => {
     html += `<tr><td class="l" style="color:${color[r.driver]}">${r.driver}</td><td>${r.workers}</td>`
@@ -110,25 +121,29 @@ indices.forEach(idx => {
   sec.innerHTML = html;
   container.appendChild(sec);
 
-  const datasets = [];
-  rows.forEach(r => ['write', 'read'].forEach(side => {
-    const dist = r[side].dist || [];
-    if (dist.length) datasets.push({
-      label: `${r.driver} ${side}`,
-      data: dist.map(p => ({ x: 1 / (1 - p[0] / 100), y: p[1] })),
-      borderColor: color[r.driver], backgroundColor: color[r.driver],
-      borderDash: side === 'read' ? [5, 4] : [],
-      showLine: true, pointRadius: 0, borderWidth: 2, tension: 0.1,
+  const pctChart = (canvasId, title, sideOf) => {
+    const datasets = [];
+    rows.forEach(r => {
+      const dist = (sideOf(r) || {}).dist || [];
+      if (dist.length) datasets.push({
+        label: r.driver,
+        data: dist.map(p => ({ x: 1 / (1 - p[0] / 100), y: p[1] })),
+        borderColor: color[r.driver], backgroundColor: color[r.driver],
+        showLine: true, pointRadius: 0, borderWidth: 2, tension: 0.1,
+      });
     });
-  }));
-  new Chart(document.getElementById(`pct-${idx}`), {
-    type: 'scatter', data: { datasets },
-    options: {
-      responsive: true,
-      plugins: { title: { display: true, text: `Latency by percentile — workload #${idx}` } },
-      scales: { x: pctAxis, y: { beginAtZero: true, title: { display: true, text: 'Latency (ms)' } } }
-    }
-  });
+    new Chart(document.getElementById(canvasId), {
+      type: 'scatter', data: { datasets },
+      options: {
+        responsive: true,
+        plugins: { title: { display: true, text: title } },
+        scales: { x: pctAxis, y: { beginAtZero: true, title: { display: true, text: 'Latency (ms)' } } }
+      }
+    });
+  };
+  pctChart(`pct-${idx}-total`, `Aggregated latency by percentile — workload #${idx}`, r => r.total);
+  if (hasWrites) pctChart(`pct-${idx}-write`, `Write latency by percentile — workload #${idx}`, r => r.write);
+  if (hasReads) pctChart(`pct-${idx}-read`, `Read latency by percentile — workload #${idx}`, r => r.read);
 });
 </script>
 </body>
