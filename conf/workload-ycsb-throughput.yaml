@@ -3,10 +3,10 @@
 # populates the 1M keyspace with sequential inserts so the read-heavy phases (B/C/D) hit real data.
 # The report shows achieved ops/s per backend (no latency chart for targetRate=0 workloads).
 #
-# maxOutstandingRequests is PER WORKER POD: 10 workers x 20k = 200k aggregate in-flight, ~2x what
-# even a 12-node oxia needs to saturate (Little's law: ~1M ops/s x ~100ms). Do not raise it past
-# what the worker heap survives: at 100k/worker a shard-leader hiccup turns all pending ops into
-# retries with per-attempt exception state, and the worker dies of heap OOM inside a 4Gi pod.
+# maxOutstandingRequests is PER WORKER POD: 10 workers x 10k = 100k aggregate in-flight. Do not
+# raise it past what the worker heap survives: at 100k/worker a shard-leader hiccup turns all
+# pending ops into retries with per-attempt exception state, and the worker dies of heap OOM
+# inside a 4Gi pod (20k/worker also proved unstable in practice).
 exitWhenFinish: false
 metadata:
   serverNum: 1
@@ -21,7 +21,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 20000
+    maxOutstandingRequests: 10000
   - name: YCSB A
     description: Update heavy — 50% reads, 50% updates, zipfian, max throughput
     readRatio: 0.5
@@ -31,7 +31,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 20000
+    maxOutstandingRequests: 10000
   - name: YCSB B
     description: Read mostly — 95% reads, 5% updates, zipfian, max throughput
     readRatio: 0.95
@@ -41,7 +41,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 20000
+    maxOutstandingRequests: 10000
   - name: YCSB C
     description: Read only — 100% reads, zipfian, max throughput
     readRatio: 1.0
@@ -51,7 +51,7 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 20000
+    maxOutstandingRequests: 10000
   - name: YCSB D
     description: Read latest — 95% reads skewed to newest keys, 5% writes, latest distribution, max throughput
     readRatio: 0.95
@@ -61,4 +61,4 @@ items:
     duration: 60s
     warmup: 10s
     parallelism: 8
-    maxOutstandingRequests: 20000
+    maxOutstandingRequests: 10000
