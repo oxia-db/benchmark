@@ -55,6 +55,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            # The JVM defaults to 25% of the container limit for its heap, wasting 3/4 of the
+            # pod's memory — with deep in-flight pipelines (maxOutstandingRequests 100k) the
+            # workers OOM at 1Gi heap inside a 4Gi container. Use most of the container for the
+            # heap, and exit on OOM so a starved worker restarts visibly instead of GC-thrashing.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError"
           args:
             - "--driver-config"
             - "/etc/{{ .name }}-driver/driver-config.yaml"
