@@ -58,7 +58,7 @@ dependencies {
 
     // Drivers
     implementation(platform("io.opentelemetry:opentelemetry-bom:1.63.0"))
-    implementation("io.github.oxia-db:oxia-client:0.9.2")
+    implementation("io.github.oxia-db:oxia-client:0.9.3")
     implementation("io.etcd:jetcd-core:0.8.6")
     implementation("org.tikv:tikv-client-java:3.3.5")
     implementation("org.apache.zookeeper:zookeeper:3.9.3")
