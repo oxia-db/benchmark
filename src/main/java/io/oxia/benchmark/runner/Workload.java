@@ -40,6 +40,11 @@ public class Workload {
     // throughput mode, send as fast as possible — this is the only throttle. Defaults to 10000.
     @JsonProperty private int maxOutstandingRequests;
 
+    // If true, write incompressible, per-key-distinct random value payloads instead of a reused
+    // zero buffer. Needed for capacity tests, where an all-zero value compresses to almost nothing
+    // and the on-disk dataset would not reflect the real state size. Defaults to false.
+    @JsonProperty private boolean randomValues;
+
     public String name() {
         return name;
     }
@@ -66,6 +71,10 @@ public class Workload {
 
     public int valueSize() {
         return valueSize;
+    }
+
+    public boolean randomValues() {
+        return randomValues;
     }
 
     public double targetRate() {
