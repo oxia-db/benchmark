@@ -48,8 +48,16 @@ public class BenchmarkRunner {
     public WorkloadResult run() throws InterruptedException {
         log.info().attr("workload", workload).log("Running workload");
 
+        int workerCount = envInt("WORKER_COUNT", 1);
+        int workerIndex = envInt("WORKER_INDEX", workerCount > 1 ? -1 : 0);
+        if (workerIndex < 0) {
+            // Refuse to guess: defaulting every replica to index 0 would silently make all
+            // workers overwrite the same "order" key range.
+            throw new IllegalStateException("WORKER_COUNT=" + workerCount + " but WORKER_INDEX is not set");
+        }
         SequenceGenerator seqGen =
-                SequenceGenerator.create(workload.keyDistribution(), workload.keyspaceSize());
+                SequenceGenerator.create(
+                        workload.keyDistribution(), workload.keyspaceSize(), workerIndex, workerCount);
 
         // Pre-build every key once, so the hot submission loop is a plain array read with no
         // per-op allocation or formatting. The sequence generator returns indices into this array
@@ -292,6 +300,13 @@ public class BenchmarkRunner {
     // ~56 bytes each, so 100M keys would need ~5.6 GB per worker and OOM the heap. Below this we
     // pre-build (a cheap array read in the hot loop); above it we format each key on the fly.
     static final long PREALLOCATE_KEYS_MAX = 1_000_000L;
+
+    // Identity of this worker among the replicated worker pods (set by the chart from the
+    // StatefulSet ordinal); used to partition the "order" keyspace into disjoint slices.
+    private static int envInt(String name, int defaultValue) {
+        String v = System.getenv(name);
+        return v == null || v.isBlank() ? defaultValue : Integer.parseInt(v.trim());
+    }
 
     /** The key for a keyspace index: "k-" followed by the zero-padded 16-digit index. */
     public static String keyAt(long index) {
