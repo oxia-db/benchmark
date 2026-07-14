@@ -1,0 +1,43 @@
+# Uniform-distribution max-throughput workloads: pure write-only and pure read-only, sending as
+# fast as the in-flight cap allows (no targetRate). Unlike the zipf YCSB workloads — where a few
+# hot keys concentrate on a handful of shards and cap read scaling — a uniform key distribution
+# spreads load evenly across every shard, so read throughput should grow with the oxia cluster
+# size (more servers -> more shards -> more parallel read capacity).
+#
+# A leading hidden "load" phase populates the 1M keyspace with sequential inserts so the read-only
+# phase hits real data. maxOutstandingRequests is per worker pod: 10 workers x 10k = 100k in-flight.
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+items:
+  - name: load
+    description: Insert-only load phase — 100% sequential inserts, populates the keyspace, max throughput
+    hidden: true    # populates the keyspace; excluded from the report
+    readRatio: 0.0
+    keyspaceSize: 1000000
+    keyDistribution: order
+    valueSize: 64
+    duration: 60s
+    warmup: 10s
+    parallelism: 8
+    maxOutstandingRequests: 10000
+  - name: Write-only (uniform)
+    description: 100% writes, uniform key distribution, max throughput
+    readRatio: 0.0
+    keyspaceSize: 1000000
+    keyDistribution: uniform
+    valueSize: 64
+    duration: 90s
+    warmup: 15s
+    parallelism: 8
+    maxOutstandingRequests: 10000
+  - name: Read-only (uniform)
+    description: 100% reads, uniform key distribution, max throughput
+    readRatio: 1.0
+    keyspaceSize: 1000000
+    keyDistribution: uniform
+    valueSize: 64
+    duration: 90s
+    warmup: 15s
+    parallelism: 8
+    maxOutstandingRequests: 10000
