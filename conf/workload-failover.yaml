@@ -1,0 +1,28 @@
+# Failure-recovery experiment: a rate-paced 50/50 YCSB A load (same 10k ops/s aggregate as
+# the latency comparison) runs while one shard leader is force-killed. The fixed,
+# non-saturating rate makes the failover window visible as failed ops and a latency bump
+# rather than a throughput artifact.
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+items:
+  - name: insert-only
+    description: Insert-only load phase — populates the 1M keyspace
+    hidden: true
+    readRatio: 0.0
+    keyspaceSize: 1000000
+    keyDistribution: order
+    valueSize: 64
+    targetRate: 40000
+    duration: 60s
+    parallelism: 8
+  - name: YCSB A failover
+    description: Update heavy — 50% reads, 50% updates, zipfian, fixed 5k ops/s per worker
+    readRatio: 0.5
+    keyspaceSize: 1000000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 5000
+    duration: 10m
+    warmup: 30s
+    parallelism: 4

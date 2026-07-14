@@ -4,12 +4,26 @@
 {{- $stsName := printf "%s-%s" $.Release.Name $driver }}
 {{- if .waitForStsName }}{{ $stsName = printf "%s-%s" $.Release.Name .waitForStsName }}{{ else if eq $driver "oxia" }}{{ $stsName = $.Release.Name }}{{ end }}
 ---
-# Deployment for worker
-apiVersion: apps/v1
-kind: Deployment
+# Headless service required by the worker StatefulSet below.
+apiVersion: v1
+kind: Service
 metadata:
   name: {{ $.Release.Name }}-{{ .name }}
 spec:
+  clusterIP: None
+  selector:
+    app: {{ $.Release.Name }}-{{ .name }}
+---
+# StatefulSet (not Deployment) so each worker gets a stable ordinal: WORKER_INDEX/WORKER_COUNT
+# let replicated workers partition the "order" keyspace into disjoint slices instead of all
+# writing the same keys.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $.Release.Name }}-{{ .name }}
+spec:
+  serviceName: {{ $.Release.Name }}-{{ .name }}
+  podManagementPolicy: Parallel
   replicas: {{ .parallelism | default 1 }}
   selector:
     matchLabels:
@@ -55,6 +69,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            # StatefulSet ordinal (k8s >= 1.28 stamps this label) — the worker's slot among the
+            # replicas, used to slice the "order" keyspace disjointly.
+            - name: WORKER_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+            - name: WORKER_COUNT
+              value: {{ .parallelism | default 1 | quote }}
             # The JVM defaults to 25% of the container limit for its heap, wasting 3/4 of the
             # pod's memory — with deep in-flight pipelines (maxOutstandingRequests 100k) the
             # workers OOM at 1Gi heap inside a 4Gi container. Use most of the container for the
@@ -62,11 +84,13 @@ spec:
             # ZGC keeps the load generator's pauses sub-ms so measured latency percentiles
             # reflect the server, not worker GC (generational by default on the JRE 25 runtime).
             - name: JAVA_TOOL_OPTIONS
-              value: "-XX:+UseZGC -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError"
+              value: "-XX:+UseZGC -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError{{ with .javaOpts }} {{ . }}{{ end }}"
           args:
             - "--driver-config"
             - "/etc/{{ .name }}-driver/driver-config.yaml"
-            - "--workloads"
+            {{- /* sessionExperiments: true runs the session/ephemeral suite; the mounted
+                   workloadsYaml blob is then a session-experiments file, not a workloads file. */}}
+            - "{{ if .sessionExperiments }}--session-experiments{{ else }}--workloads{{ end }}"
             - "/etc/workloads/workloads.yaml"
             - "--results-dir"
             - "/results"

@@ -1,0 +1,21 @@
+# Session-capacity re-test on oxia 0.17.0-test-4 (reduced per-session server memory).
+# Full sweep through and past the old 4 GiB ceiling: 10k/20k/30k/50k per worker x 10
+# = 100k / 200k / 300k / 500k cluster-wide. 200k OOMed the previous build (test-3).
+exitWhenFinish: false
+items:
+  - name: capacity k=1 12n-6shards
+    description: Live-session capacity on test-4 — through the old OOM ceiling
+    type: capacity
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    holdDuration: 60s
+    foregroundRate: 10000
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 4
+    sessionsSweep: [10000, 30000, 50000, 70000]

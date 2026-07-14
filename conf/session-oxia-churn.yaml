@@ -1,0 +1,16 @@
+# Session churn — Oxia, run separately from capacity: the 500k-session capacity point
+# drives the 4 GiB servers to OOM, and churn measured against that aftermath would be
+# contaminated. Fresh cluster, churn only.
+exitWhenFinish: false
+items:
+  - name: churn graceful k=1
+    description: Session churn with graceful close, 1 ephemeral/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 10s
+    holdDuration: 60s
+    departure: graceful
+    churnRateSweep: [10, 50, 100, 500, 1000, 2000]

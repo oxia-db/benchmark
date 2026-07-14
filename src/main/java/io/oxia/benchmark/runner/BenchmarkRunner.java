@@ -48,13 +48,24 @@ public class BenchmarkRunner {
     public WorkloadResult run() throws InterruptedException {
         log.info().attr("workload", workload).log("Running workload");
 
+        int workerCount = envInt("WORKER_COUNT", 1);
+        int workerIndex = envInt("WORKER_INDEX", workerCount > 1 ? -1 : 0);
+        if (workerIndex < 0) {
+            // Refuse to guess: defaulting every replica to index 0 would silently make all
+            // workers overwrite the same "order" key range.
+            throw new IllegalStateException("WORKER_COUNT=" + workerCount + " but WORKER_INDEX is not set");
+        }
         SequenceGenerator seqGen =
-                SequenceGenerator.create(workload.keyDistribution(), workload.keyspaceSize());
+                SequenceGenerator.create(
+                        workload.keyDistribution(), workload.keyspaceSize(), workerIndex, workerCount);
 
         // Pre-build every key once, so the hot submission loop is a plain array read with no
         // per-op allocation or formatting. The sequence generator returns indices into this array
         // per the configured distribution.
-        String[] keys = buildKeys(workload.keyspaceSize());
+        // Pre-materialize the keyspace only when small enough to fit in heap; otherwise generate
+        // each key on the fly in the hot loop (see keyAt).
+        String[] keys =
+                workload.keyspaceSize() <= PREALLOCATE_KEYS_MAX ? buildKeys(workload.keyspaceSize()) : null;
 
         Duration warmupDuration = workload.warmup();
         Duration duration = workload.duration();
@@ -203,7 +214,21 @@ public class BenchmarkRunner {
             LongAdder periodFailedOps,
             LongAdder totalFailedOps) {
 
-        byte[] value = new byte[workload.valueSize()];
+        byte[] zeroValue = new byte[workload.valueSize()];
+        // For capacity tests, use incompressible, per-key-distinct payloads so the on-disk dataset
+        // reflects the real state size: an all-zero buffer compresses to almost nothing. A pool of
+        // immutable random buffers avoids a per-op allocation while keeping each block's values
+        // distinct, so block-level compression cannot collapse them. Pool size is a power of two
+        // for a cheap masked index.
+        byte[][] valuePool = null;
+        if (workload.randomValues()) {
+            valuePool = new byte[8192][];
+            for (int p = 0; p < valuePool.length; p++) {
+                byte[] b = new byte[workload.valueSize()];
+                ThreadLocalRandom.current().nextBytes(b);
+                valuePool[p] = b;
+            }
+        }
         // This worker's own in-flight cap — private to the thread, so no cross-worker contention.
         Semaphore outstanding = new Semaphore(perThreadOutstanding);
         // targetRate 0 = throughput mode: no pacing, send as fast as the in-flight cap allows.
@@ -233,7 +258,9 @@ public class BenchmarkRunner {
             boolean isWarmup = warmingUp.get();
             long sendTimeNanos = System.nanoTime();
 
-            String key = keys[(int) seqGen.next()];
+            long seq = seqGen.next();
+            String key = keys != null ? keys[(int) seq] : keyAt(seq);
+            byte[] value = valuePool != null ? valuePool[(int) (seq & (valuePool.length - 1))] : zeroValue;
             boolean isRead = ThreadLocalRandom.current().nextDouble() < workload.readRatio();
             CompletableFuture<Void> future = isRead ? driver.get(key) : driver.put(key, value);
 
@@ -269,18 +296,35 @@ public class BenchmarkRunner {
      * array read. Allocates one String per key in the keyspace. Also used by the session suite's
      * foreground load so both traffic loops share one key scheme.
      */
-    public static String[] buildKeys(long keyspaceSize) {
-        String[] keys = new String[(int) keyspaceSize];
+    // Threshold above which the keyspace is not pre-materialized: an array of N key strings costs
+    // ~56 bytes each, so 100M keys would need ~5.6 GB per worker and OOM the heap. Below this we
+    // pre-build (a cheap array read in the hot loop); above it we format each key on the fly.
+    static final long PREALLOCATE_KEYS_MAX = 1_000_000L;
+
+    // Identity of this worker among the replicated worker pods (set by the chart from the
+    // StatefulSet ordinal); used to partition the "order" keyspace into disjoint slices.
+    private static int envInt(String name, int defaultValue) {
+        String v = System.getenv(name);
+        return v == null || v.isBlank() ? defaultValue : Integer.parseInt(v.trim());
+    }
+
+    /** The key for a keyspace index: "k-" followed by the zero-padded 16-digit index. */
+    public static String keyAt(long index) {
         char[] c = new char[18];
         c[0] = 'k';
         c[1] = '-';
+        long n = index;
+        for (int j = 17; j >= 2; j--) {
+            c[j] = (char) ('0' + (int) (n % 10));
+            n /= 10;
+        }
+        return new String(c);
+    }
+
+    public static String[] buildKeys(long keyspaceSize) {
+        String[] keys = new String[(int) keyspaceSize];
         for (int i = 0; i < keys.length; i++) {
-            long n = i;
-            for (int j = 17; j >= 2; j--) {
-                c[j] = (char) ('0' + (int) (n % 10));
-                n /= 10;
-            }
-            keys[i] = new String(c);
+            keys[i] = keyAt(i);
         }
         return keys;
     }

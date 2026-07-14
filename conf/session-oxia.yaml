@@ -1,0 +1,33 @@
+# Session suite — Oxia sizing. 10 workers; per-worker values.
+# foreground 10k/worker = ~100k aggregate (~1/3 of oxia-3 YCSB-A saturation): one worker client
+# sustains ~14.6k/s on this path, so 10k keeps the baseline queue-free (clean p99).
+# capacity sweep 1k..50k per worker = 10k..500k cluster-wide live sessions (multiplexed client).
+exitWhenFinish: false
+items:
+  - name: capacity k=1
+    description: Live-session capacity under 50%-saturation YCSB-A foreground, 1 ephemeral/session
+    type: capacity
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    holdDuration: 60s
+    foregroundRate: 10000
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 4
+    sessionsSweep: [1000, 5000, 10000, 50000]
+  - name: churn graceful k=1
+    description: Session churn with graceful close, 1 ephemeral/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 10s
+    holdDuration: 60s
+    departure: graceful
+    churnRateSweep: [10, 50, 100, 500, 1000, 2000]

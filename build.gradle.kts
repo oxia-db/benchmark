@@ -22,7 +22,7 @@ plugins {
 }
 
 group = "io.oxia"
-version = "0.1.0-SNAPSHOT"
+version = "1.0"
 
 java {
     toolchain {
@@ -31,6 +31,7 @@ java {
 }
 
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
@@ -58,7 +59,7 @@ dependencies {
 
     // Drivers
     implementation(platform("io.opentelemetry:opentelemetry-bom:1.63.0"))
-    implementation("io.github.oxia-db:oxia-client:0.9.3")
+    implementation("io.github.oxia-db:oxia-client:0.9.4-readwin")
     implementation("io.etcd:jetcd-core:0.8.6")
     implementation("org.tikv:tikv-client-java:3.3.5")
     implementation("org.apache.zookeeper:zookeeper:3.9.3")
@@ -109,6 +110,30 @@ spotless {
         leadingSpacesToTabs(2)
         leadingTabsToSpaces(4)
         targetExclude("build/**")
+    }
+}
+
+tasks.shadowJar {
+    // grpc and jetcd register NameResolver/LoadBalancer providers via ServiceLoader files;
+    // without merging, only one jar's META-INF/services file survives and (depending on
+    // merge order) jetcd's ip:/// resolver disappears at runtime.
+    mergeServiceFiles()
+
+    // tikv-client-java is a pre-shaded fat jar that bundles its own copies of the jetcd
+    // API classes (io.etcd.jetcd.*) with grpc references relocated to org.tikv.shade.*.
+    // When those copies win the merge over jetcd-core's real classes, the etcd driver
+    // fails at runtime (NoSuchMethodError: KVGrpc.newFutureStub(org.tikv.shade...Channel)).
+    // No org.tikv class references the bundled copies (verified against 3.3.5), so take
+    // tikv out of the normal merge and re-add it without its io/etcd entries.
+    dependencies {
+        exclude(dependency("org.tikv:tikv-client-java:.*"))
+    }
+    from(provider {
+        project.configurations.getByName("runtimeClasspath").files
+            .filter { it.name.startsWith("tikv-client-java") }
+            .map { zipTree(it) }
+    }) {
+        exclude("io/etcd/**")
     }
 }
 
