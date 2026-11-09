@@ -1,0 +1,57 @@
+# Rate-paced YCSB core mixes for the latency comparison: run with 2 worker
+# replicas, so 5,000 ops/s per worker = 10k ops/s aggregate. Same shape as the
+# July 2026 report runs (2m30s max-rate load phase, then 3 minutes per mix).
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+
+items:
+  - name: insert-only
+    description: Insert-only load phase — 100% sequential inserts, populates the keyspace, max rate
+    hidden: true    # populates the keyspace; excluded from the report
+    readRatio: 0.0
+    keyspaceSize: 1000000
+    keyDistribution: order
+    valueSize: 64
+    duration: 150s
+    parallelism: 8
+
+  - name: YCSB A
+    description: Update heavy — 50% reads, 50% updates, zipfian, 10k ops/s
+    readRatio: 0.5
+    keyspaceSize: 1000000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 5000
+    duration: 3m
+    parallelism: 8
+
+  - name: YCSB B
+    description: Read mostly — 95% reads, 5% updates, zipfian, 10k ops/s
+    readRatio: 0.95
+    keyspaceSize: 1000000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 5000
+    duration: 3m
+    parallelism: 8
+
+  - name: YCSB C
+    description: Read only — 100% reads, zipfian, 10k ops/s
+    readRatio: 1.0
+    keyspaceSize: 1000000
+    keyDistribution: zipf
+    valueSize: 64
+    targetRate: 5000
+    duration: 3m
+    parallelism: 8
+
+  - name: YCSB D
+    description: Read latest — 95% reads skewed to newest keys, 5% writes, latest distribution, 10k ops/s
+    readRatio: 0.95
+    keyspaceSize: 1000000
+    keyDistribution: latest
+    valueSize: 64
+    targetRate: 5000
+    duration: 3m
+    parallelism: 8
