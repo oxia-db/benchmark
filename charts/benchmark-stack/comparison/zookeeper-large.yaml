@@ -1,0 +1,48 @@
+# ZooKeeper (bitnami subchart), 3-node ensemble on large servers (8 CPU / 16Gi per node),
+# heap scaled to half the container as in zookeeper.yaml. Results labeled "zookeeper-large".
+zookeeper:
+  enabled: true
+  replicaCount: 3
+  # ZooKeeper keeps every znode in the JVM heap. bitnami defaults the heap to 1024MB regardless
+  # of the container limit, which the YCSB 1M keyspace overflows (Java OOM -> CrashLoopBackOff).
+  # Raise the heap and give the container headroom above it for non-heap (metaspace, netty
+  # direct buffers) + OS.
+  heapSize: 8192
+  # Keep disk bounded on write-heavy runs: with 1M znodes each snapshot is ~127MB and the default
+  # snapCount (100k txns) rolls one every few seconds at load rates, while autopurge fires at most
+  # hourly (its minimum) and bitnami retains 10 generations — a 2Gi PVC fills mid-run (ENOSPC,
+  # exit 10). Snapshot 10x less often, purge down to ZK's minimum of 3 retained generations, and
+  # give the volume real headroom.
+  snapCount: "1000000"
+  autopurge:
+    snapRetainCount: 3
+    purgeInterval: 1
+  # Txn log (WAL) on its own volume, separate from snapshots, so log fsyncs don't compete with
+  # snapshot I/O and each volume gets its own gp3 IOPS budget — mirroring oxia's wal/db split.
+  dataLogDir: /bitnami/zookeeper/dataLog
+  persistence:
+    enabled: true
+    size: 10Gi          # snapshots (dataDir)
+    dataLogDir:
+      size: 10Gi        # txn log (dataLogDir)
+  image:
+    repository: bitnamilegacy/zookeeper
+  resources:
+    requests:
+      cpu: "8"
+      memory: 16Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+
+workers:
+  - name: zookeeper-large-worker
+    parallelism: 3
+    cpu: "300m"
+    memory: 384Mi
+    driverConfig:
+      driver: zookeeper
+      label: zookeeper-large
+      config:
+        servers:
+          - "bench-zookeeper:2181"

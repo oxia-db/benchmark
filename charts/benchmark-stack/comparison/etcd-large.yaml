@@ -1,0 +1,62 @@
+# etcd (bitnami subchart), 3-node cluster on large servers (8 CPU / 16Gi per node).
+# Results labeled "etcd-large".
+etcd:
+  enabled: true
+  replicaCount: 3
+  # Compact away old MVCC revisions (every update otherwise retains a revision forever) so the db
+  # stays bounded on write-heavy runs, and size the volume with headroom for the db.
+  autoCompactionMode: periodic
+  autoCompactionRetention: "5m"
+  persistence:
+    enabled: true
+    size: 10Gi
+  # WAL on its own volume, separate from the MVCC db — same wal/data split as zk's dataLogDir and
+  # oxia's wal dir. The chart has no native walDir knob, so compose it: a per-pod claim template,
+  # its mount, and etcd's ETCD_WAL_DIR pointing at a subdir (the mount root holds lost+found,
+  # and etcd requires creating its wal dir itself).
+  extraEnvVars:
+    - name: ETCD_WAL_DIR
+      value: /wal/data
+  extraVolumeMounts:
+    - name: wal
+      mountPath: /wal
+  extraVolumeClaimTemplates:
+    - metadata:
+        name: wal
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+  auth:
+    rbac:
+      create: false
+      allowNoneAuthentication: true
+    token:
+      enabled: false
+  image:
+    repository: bitnamilegacy/etcd
+  resources:
+    requests:
+      cpu: "8"
+      memory: 16Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+  preUpgradeJob:
+    enabled: false
+
+workers:
+  - name: etcd-large-worker
+    # 2 workers, not 3: the jetcd/gRPC client's off-heap growth over a 60s run needs ~1.5Gi
+    # per worker, and 3 of those don't fit the node alongside the long-lived oxia namespace.
+    parallelism: 2
+    cpu: "300m"
+    memory: 384Mi
+    driverConfig:
+      driver: etcd
+      label: etcd-large
+      config:
+        endpoints:
+          - "bench-etcd:2379"
+        dialTimeout: 5s

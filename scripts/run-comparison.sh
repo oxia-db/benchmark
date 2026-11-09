@@ -76,8 +76,8 @@ for backend in "${BACKENDS[@]}"; do
   if [ -n "$STORAGE_CLASS" ]; then
     case $backend in
       oxia*)     sc_set="--set oxia-cluster.server.storageClassName=$STORAGE_CLASS" ;;
-      etcd)      sc_set="--set etcd.persistence.storageClass=$STORAGE_CLASS" ;;
-      zookeeper) sc_set="--set zookeeper.persistence.storageClass=$STORAGE_CLASS" ;;
+      etcd*)      sc_set="--set etcd.persistence.storageClass=$STORAGE_CLASS" ;;
+      zookeeper*) sc_set="--set zookeeper.persistence.storageClass=$STORAGE_CLASS" ;;
       consul)    sc_set="--set consul.server.storageClass=$STORAGE_CLASS" ;;
       tikv)      sc_set="--set tikv.storageClassName=$STORAGE_CLASS --set tikv.pd.storageClassName=$STORAGE_CLASS" ;;
     esac
