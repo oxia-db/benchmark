@@ -122,18 +122,26 @@ tasks.shadowJar {
     // tikv-client-java is a pre-shaded fat jar that bundles its own copies of the jetcd
     // API classes (io.etcd.jetcd.*) with grpc references relocated to org.tikv.shade.*.
     // When those copies win the merge over jetcd-core's real classes, the etcd driver
-    // fails at runtime (NoSuchMethodError: KVGrpc.newFutureStub(org.tikv.shade...Channel)).
-    // No org.tikv class references the bundled copies (verified against 3.3.5), so take
-    // tikv out of the normal merge and re-add it without its io/etcd entries.
+    // fails at runtime (NoSuchMethodError: KVGrpc.newFutureStub(org.tikv.shade...Channel)),
+    // or, in builds where a mix of the two copies wins, runs the old jetcd 0.4.1 client,
+    // which throttles in-flight requests very differently. tikv's PD client does call
+    // jetcd, but only Client.builder/endpoints/executorService/getKVClient, KV.get and
+    // ByteSequence, whose signatures are unchanged in jetcd-core 0.8.6 (checked with javap
+    // against 3.3.5). So take tikv out of the normal merge and re-add it without its io/etcd
+    // classes and without the jetcd 0.4.1 Maven metadata.
     dependencies {
         exclude(dependency("org.tikv:tikv-client-java:.*"))
     }
+    val tikvExcludes = listOf("io/etcd/**", "META-INF/maven/io.etcd/**")
+    // Declared as an input: the build cache does not otherwise see this child spec's
+    // excludes, and a changed list was served the old jar from the cache.
+    inputs.property("tikvExcludes", tikvExcludes)
     from(provider {
         project.configurations.getByName("runtimeClasspath").files
             .filter { it.name.startsWith("tikv-client-java") }
             .map { zipTree(it) }
     }) {
-        exclude("io/etcd/**")
+        exclude(tikvExcludes)
     }
 }
 
