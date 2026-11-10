@@ -53,6 +53,13 @@ spec:
               echo "Sleeping 20s to let cluster bootstrap..."
               sleep 30
               echo "StatefulSet $STS_NAME is ready!"
+              {{- if .releaseGate }}
+              # Optional start gate: hold until the orchestration creates this ConfigMap, so
+              # that every worker (already scheduled) starts within a second of the others.
+              echo "Waiting for the release ConfigMap {{ .releaseGate }}..."
+              until kubectl get configmap {{ .releaseGate }} >/dev/null 2>&1; do sleep 1; done
+              echo "Released"
+              {{- end }}
       containers:
         - name: {{ $.Release.Name }}-{{ .name }}
           image: "{{ .image | default "oxia/benchmark:main" }}"
