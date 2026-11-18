@@ -53,7 +53,8 @@ public class BenchmarkRunner {
         if (workerIndex < 0) {
             // Refuse to guess: defaulting every replica to index 0 would silently make all
             // workers overwrite the same "order" key range.
-            throw new IllegalStateException("WORKER_COUNT=" + workerCount + " but WORKER_INDEX is not set");
+            throw new IllegalStateException(
+                    "WORKER_COUNT=" + workerCount + " but WORKER_INDEX is not set");
         }
         SequenceGenerator seqGen =
                 SequenceGenerator.create(
@@ -260,7 +261,8 @@ public class BenchmarkRunner {
 
             long seq = seqGen.next();
             String key = keys != null ? keys[(int) seq] : keyAt(seq);
-            byte[] value = valuePool != null ? valuePool[(int) (seq & (valuePool.length - 1))] : zeroValue;
+            byte[] value =
+                    valuePool != null ? valuePool[(int) (seq & (valuePool.length - 1))] : zeroValue;
             boolean isRead = ThreadLocalRandom.current().nextDouble() < workload.readRatio();
             CompletableFuture<Void> future = isRead ? driver.get(key) : driver.put(key, value);
 
