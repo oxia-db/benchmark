@@ -1,4 +1,6 @@
 # Oxia Benchmark
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Foxia-db%2Fbenchmark.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Foxia-db%2Fbenchmark?ref=badge_shield)
+
 
 Oxia Benchmark is a versatile and extensible framework for benchmarking distributed key-value stores. It is designed to facilitate performance comparisons between systems like [Oxia](https://github.com/oxia-db/oxia), [etcd](https://etcd.io/), [Apache ZooKeeper](https://zookeeper.apache.org/), [Consul](https://www.consul.io/), [Redis](https://redis.io/), and [TiKV](https://tikv.org/).
 
@@ -267,3 +269,6 @@ Contributions are welcome! Please feel free to open an issue or submit a pull re
 ## License
 
 This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Foxia-db%2Fbenchmark.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Foxia-db%2Fbenchmark?ref=badge_large)
