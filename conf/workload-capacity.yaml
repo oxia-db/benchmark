@@ -1,0 +1,21 @@
+# Capacity / beyond-memory-state experiment: grow the dataset with 1 KB values and sequential
+# (distinct) keys until it far exceeds pod RAM, at a steady insert load. Oxia stores shard state
+# in on-disk LSM trees, so it keeps going; ZooKeeper (heap-resident data tree) and etcd (backend
+# quota / RAM-resident key index) reach their operational limits and are recorded as they fail.
+#
+# 100M keys x 1 KB = ~100 GB of state — ~25x the 4 GiB pod and ~50x Oxia's 2 GiB read cache.
+exitWhenFinish: false
+metadata:
+  serverNum: 1
+items:
+  - name: capacity-insert
+    description: Insert-only, 1 KB values, sequential keys — grow dataset beyond memory
+    readRatio: 0.0
+    keyspaceSize: 100000000
+    keyDistribution: order
+    valueSize: 1024
+    duration: 3600s
+    warmup: 0s
+    parallelism: 8
+    maxOutstandingRequests: 2000
+    randomValues: true   # incompressible payloads so on-disk size = real dataset size

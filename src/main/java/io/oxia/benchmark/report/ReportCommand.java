@@ -146,6 +146,14 @@ public class ReportCommand implements Callable<Integer> {
 
         fill(s.write, writeHist, s.measuredSeconds);
         fill(s.read, readHist, s.measuredSeconds);
+        // Aggregated (write + read) distribution — exact, merged at the histogram level. Merge into
+        // a fresh histogram with a wide explicit dynamic range: copy()ing one side would inherit its
+        // auto-ranged window, which cannot always extend over the other side's range (precision
+        // underflow in DoubleHistogram).
+        DoubleHistogram totalHist = new DoubleHistogram(1L << 44, 3);
+        totalHist.add(writeHist);
+        totalHist.add(readHist);
+        fill(s.total, totalHist, s.measuredSeconds);
         return s;
     }
 
@@ -299,5 +307,6 @@ public class ReportCommand implements Callable<Integer> {
         public long failed;
         public Stats write = new Stats();
         public Stats read = new Stats();
+        public Stats total = new Stats();
     }
 }

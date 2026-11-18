@@ -19,11 +19,22 @@ import java.util.concurrent.atomic.AtomicLong;
 
 final class OrderGenerator implements SequenceGenerator {
 
-    private final long maxSequence;
-    private final AtomicLong sequence = new AtomicLong(0);
+    private final long start;
+    private final long end; // exclusive
+    private final AtomicLong sequence;
 
-    OrderGenerator(long maxSequence) {
-        this.maxSequence = maxSequence;
+    // Each worker fills the disjoint slice [start, end) of the keyspace: replicated load
+    // generators would otherwise all count from 0 and overwrite the same keys N times over.
+    // The last worker's slice absorbs the division remainder.
+    OrderGenerator(long maxSequence, int workerIndex, int workerCount) {
+        if (workerIndex < 0 || workerIndex >= workerCount) {
+            throw new IllegalArgumentException(
+                    "workerIndex " + workerIndex + " out of range for workerCount " + workerCount);
+        }
+        long sliceSize = maxSequence / workerCount;
+        this.start = sliceSize * workerIndex;
+        this.end = workerIndex == workerCount - 1 ? maxSequence : start + sliceSize;
+        this.sequence = new AtomicLong(start);
     }
 
     @Override
@@ -31,9 +42,9 @@ final class OrderGenerator implements SequenceGenerator {
         while (true) {
             long current = sequence.get();
             long next = current + 1;
-            if (next >= maxSequence) {
-                if (sequence.compareAndSet(current, 0)) {
-                    return 0;
+            if (next >= end) {
+                if (sequence.compareAndSet(current, start)) {
+                    return start;
                 }
                 continue;
             }

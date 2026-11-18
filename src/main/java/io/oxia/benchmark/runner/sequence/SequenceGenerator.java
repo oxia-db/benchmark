@@ -20,10 +20,17 @@ public interface SequenceGenerator {
     long next();
 
     static SequenceGenerator create(String distribution, long maxSequence) {
+        return create(distribution, maxSequence, 0, 1);
+    }
+
+    // workerIndex/workerCount partition the keyspace across replicated worker processes; only
+    // the sequential "order" distribution uses them (random distributions overlap by design).
+    static SequenceGenerator create(
+            String distribution, long maxSequence, int workerIndex, int workerCount) {
         return switch (distribution) {
             case "uniform" -> new UniformGenerator(maxSequence);
             case "zipf" -> new ZipfGenerator(maxSequence);
-            case "order" -> new OrderGenerator(maxSequence);
+            case "order" -> new OrderGenerator(maxSequence, workerIndex, workerCount);
             case "latest" -> new LatestGenerator(maxSequence);
             default ->
                     throw new IllegalArgumentException("Unsupported key distribution: " + distribution);

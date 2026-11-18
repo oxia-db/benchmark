@@ -1,0 +1,33 @@
+# Session suite — ZooKeeper sizing. 10 workers; per-worker values.
+# A ZK session is its own connection + ~2 client threads, so per-worker N is capped low
+# (2500 sessions ~= 5k threads in a 4 GiB worker); cluster-wide sweep is 5k..25k sessions.
+# foreground 1800/worker = ~18k aggregate ~= 50% of ZK's measured YCSB-A saturation (35.8k).
+exitWhenFinish: false
+items:
+  - name: capacity k=1
+    description: Live-session capacity under 50%-saturation YCSB-A foreground, 1 ephemeral/session
+    type: capacity
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 128
+    warmup: 20s
+    holdDuration: 60s
+    foregroundRate: 1800
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 4
+    sessionsSweep: [500, 1000, 2500]
+  - name: churn graceful k=1
+    description: Session churn with graceful close, 1 ephemeral/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 128
+    warmup: 10s
+    holdDuration: 60s
+    departure: graceful
+    churnRateSweep: [10, 25, 50, 100, 200]

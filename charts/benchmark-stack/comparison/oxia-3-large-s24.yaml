@@ -1,0 +1,44 @@
+# Oxia, 3-node cluster on large servers (8 CPU / 16Gi), 24 shards. Results labeled
+# "oxia-3-large-s24": the vertical-scaling comparison against the 2 CPU / 4Gi runs.
+oxia-cluster:
+  enabled: true
+  # The client dials the k8s Service short name; the server's authority validation
+  # (new in oxia 0.17) only auto-allows the FQDN form, so allow the short form too.
+  allowExtraAuthorities:
+    - "bench-oxia:6648"
+  replicationFactor: 3
+  initialShardCount: 24
+  coordinator:
+    cpu: "100m"
+    memory: 128Mi
+  server:
+    replicas: 3
+    cpu: "8"
+    memory: 16Gi
+    # WAL on its own volume (oxia-cluster >= 0.0.8), separate from the db — the same wal/data
+    # split as zk's dataLogDir and etcd's ETCD_WAL_DIR, 10Gi each.
+    storage: 10Gi
+    wal:
+      storage: 10Gi
+    # Use the 4Gi allocation: raise the pebble read cache from the 512MB default to 2GB, so oxia
+    # actually caches data in its footprint (comparable to zk's heap / etcd's page cache).
+    config:
+      storage:
+        database:
+          readCacheSizeMB: 8192
+  pprofEnabled: false
+  monitoringEnabled: false
+
+workers:
+  # Installed with release name "bench-oxia", so the oxia-cluster subchart names its
+  # resources bench-oxia-0..N and bench-oxia-coordinator; this worker is bench-oxia-worker.
+  - name: worker
+    parallelism: 3
+    cpu: "300m"
+    memory: 384Mi
+    driverConfig:
+      driver: oxia
+      label: oxia-3-large-s24
+      config:
+        serviceAddress: "bench-oxia:6648"
+        batchMaxCount: 1000

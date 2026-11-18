@@ -104,6 +104,40 @@ class SequenceGeneratorTest {
     }
 
     @Test
+    void orderGeneratorPartitionsKeyspaceAcrossWorkers() {
+        // 3 workers over 10 keys: slices [0,3), [3,6), [6,10) — the last absorbs the remainder.
+        // Together they cover the whole keyspace with no overlap between slices.
+        Set<Long> seen = new HashSet<>();
+        for (int w = 0; w < 3; w++) {
+            SequenceGenerator gen = SequenceGenerator.create("order", 10, w, 3);
+            Set<Long> slice = new HashSet<>();
+            for (int i = 0; i < 20; i++) {
+                slice.add(gen.next());
+            }
+            for (long v : slice) {
+                assertThat(seen).doesNotContain(v); // disjoint from other workers' slices
+            }
+            seen.addAll(slice);
+        }
+        assertThat(seen).containsExactlyInAnyOrder(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L);
+    }
+
+    @Test
+    void orderGeneratorWorkerSliceWrapsWithinItsRange() {
+        SequenceGenerator gen = SequenceGenerator.create("order", 10, 1, 3); // slice [3, 6)
+        assertThat(gen.next()).isEqualTo(4);
+        assertThat(gen.next()).isEqualTo(5);
+        assertThat(gen.next()).isEqualTo(3); // wraps to the slice start, not to 0
+        assertThat(gen.next()).isEqualTo(4);
+    }
+
+    @Test
+    void orderGeneratorRejectsOutOfRangeWorkerIndex() {
+        assertThatThrownBy(() -> SequenceGenerator.create("order", 10, 3, 3))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void unknownDistributionThrows() {
         assertThatThrownBy(() -> SequenceGenerator.create("invalid", 100))
                 .isInstanceOf(IllegalArgumentException.class)

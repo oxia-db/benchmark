@@ -1,0 +1,33 @@
+# Session suite — etcd sizing. 10 workers; per-worker values. Sessions are leases
+# (multiplexed on one connection), but every live lease costs a keepalive stream server-side:
+# the sweep stops at 10k/worker (100k cluster) where keepalive traffic alone is ~30k/s.
+# foreground 1200/worker = ~12k aggregate ~= 50% of etcd's measured YCSB-A saturation (23.7k).
+exitWhenFinish: false
+items:
+  - name: capacity k=1
+    description: Live-session capacity under 50%-saturation YCSB-A foreground, 1 ephemeral/session
+    type: capacity
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    holdDuration: 60s
+    foregroundRate: 1200
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 4
+    sessionsSweep: [1000, 5000, 10000]
+  - name: churn graceful k=1
+    description: Session churn with graceful close, 1 ephemeral/session
+    type: churn
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 10s
+    holdDuration: 60s
+    departure: graceful
+    churnRateSweep: [10, 50, 100, 250, 500]

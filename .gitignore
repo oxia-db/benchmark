@@ -41,6 +41,11 @@ hs_err_pid*
 # Helm
 *.tgz
 
-# Cross-driver comparison run output
-comparison-results/
-comparison-report/
+# Benchmark run output (comparison sweeps use suffixed dirs for chunked runs, e.g.
+# comparison-results-latency; report/ and results/ come from local single-backend runs).
+# Anchored to the repo root: an unanchored report/ would also ignore the
+# src/main/java/.../report Java package.
+/comparison-results*/
+/comparison-report*/
+/report/
+/results/

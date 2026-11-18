@@ -13,6 +13,10 @@ rules:
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["get", "list", "watch"]
+  # The optional worker start gate (workers[].releaseGate) polls for a ConfigMap.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

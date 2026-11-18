@@ -1,0 +1,20 @@
+# Bracket the oxia session-capacity ceiling: the first sweep held 100k cluster sessions
+# cleanly and OOMed at 500k; this run probes 200k and 300k (20k/30k per worker x 10).
+exitWhenFinish: false
+items:
+  - name: capacity k=1 bracket
+    description: Live-session capacity 200k/300k bracket, 1 ephemeral/session
+    type: capacity
+    sessionTimeout: 10s
+    ephemeralsPerSession: 1
+    ephemeralValueSize: 16
+    createConcurrency: 512
+    warmup: 20s
+    holdDuration: 60s
+    foregroundRate: 10000
+    foregroundReadRatio: 0.5
+    foregroundKeyspaceSize: 1000000
+    foregroundKeyDistribution: zipf
+    foregroundValueSize: 64
+    foregroundParallelism: 4
+    sessionsSweep: [20000, 30000]

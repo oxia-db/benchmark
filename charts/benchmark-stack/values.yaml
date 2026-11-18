@@ -13,9 +13,10 @@ oxia-cluster:
   enabled: false
   image:
     repository: oxia/oxia
-    # Chart 0.0.7 launches the server with --sconfig, which needs oxia >= 0.17;
-    # 0.16.x images won't start under this chart.
-    tag: latest
+    # Chart 0.0.7+ launches the server with --sconfig, which needs oxia >= 0.17;
+    # 0.16.x images won't start under this chart. Pinned: Docker Hub's "latest"
+    # tracks the newest release of any line (0.16.x as of Nov 2026).
+    tag: 0.18.0
     pullPolicy: IfNotPresent
 
 # Every optional backend defaults to disabled, so a values file enables only the
